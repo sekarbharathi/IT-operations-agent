@@ -5,7 +5,11 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from app.services.retrieval import search_knowledge_base
-from app.services.tools import check_service_incidents
+from app.services.tools import (
+    check_service_incidents,
+    get_user,
+    get_user_permissions
+)
 
 
 load_dotenv()
@@ -56,6 +60,40 @@ TOOLS = [
                 "required": ["service"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_user",
+            "description": "Get information about a company employee.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "string",
+                        "description": "The ID of the employee."
+                    }
+                },
+                "required": ["user_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_user_permissions",
+            "description": "Get the permissions assigned to a company employee.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "string",
+                        "description": "The ID of the employee."
+                    }
+                },
+                "required": ["user_id"]
+            }
+        }
     }
 ]
 
@@ -67,10 +105,19 @@ def execute_tool(name, arguments):
             arguments["service"]
         )
 
+    if name == "get_user":
+        return get_user(
+            arguments["user_id"]
+        )
+
+    if name == "get_user_permissions":
+        return get_user_permissions(
+            arguments["user_id"]
+        )
+
     return {
         "error": f"Unknown tool: {name}"
     }
-
 
 def generate_answer(question: str):
 
@@ -136,7 +183,14 @@ USER QUESTION:
     )
 
     assistant_message = response.choices[0].message
-
+    if assistant_message.tool_calls:
+        for tool_call in assistant_message.tool_calls:
+            print(
+                f"\nLLM requested tool: {tool_call.function.name}"
+            )
+            print(
+                f"Arguments: {tool_call.function.arguments}"
+            )
     # -----------------------------
     # 4. No tool needed
     # -----------------------------
@@ -183,6 +237,7 @@ USER QUESTION:
             tool_name,
             arguments
         )
+        print(f"Tool result: {tool_result}")
 
         messages.append(
             {
