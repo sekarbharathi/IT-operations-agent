@@ -8,7 +8,8 @@ from app.services.retrieval import search_knowledge_base
 from app.services.tools import (
     check_service_incidents,
     get_user,
-    get_user_permissions
+    get_user_permissions,
+    create_ticket
 )
 
 
@@ -23,24 +24,56 @@ openai_client = OpenAI(
 
 MODEL = "gpt-4o-mini"
 
+CURRENT_USER_ID = "user_001"
+
 
 SYSTEM_PROMPT = """
-You are OpsAI, an internal IT operations assistant.
+        You are OpsAI, an internal IT operations assistant.
 
-Your job is to help employees with IT-related questions.
+        Your job is to help employees troubleshoot IT issues, check operational status,
+        and perform authorized IT actions using the available tools.
 
-Rules:
+        Rules:
 
-1. Answer using the provided company knowledge and tool results.
-2. Do not invent company policies or procedures.
-3. Use the check_service_incidents tool when the user asks
-   about an outage, incident, or current service problem.
-4. If the provided knowledge does not contain enough information,
-   say that you do not have enough information.
-5. Be concise and helpful.
-6. Do not claim you performed an action unless a tool actually
-   performed that action.
-"""
+        1. Use the company knowledge provided in the conversation to answer
+        troubleshooting and policy questions.
+
+        2. Use tools when the user asks for information that requires current
+        operational data or an action.
+
+        3. Use check_service_incidents when:
+        - the user asks whether there is an active incident or outage, OR
+        - the user explicitly asks about the current status of a service.
+
+        4. Do NOT call check_service_incidents just because the conversation is
+        about a service that has had an incident before.
+
+        5. If the user provides additional information about an existing problem,
+        such as an error message, operating system, or troubleshooting result,
+        use the information from the conversation. Do not repeat tool calls
+        unless current data is actually needed.
+
+        6. Only create a ticket when the user explicitly asks for one.
+
+        7. When creating a ticket, use information already available in the
+        conversation to write a concise and useful description. Do not ask for
+        unnecessary additional troubleshooting details.
+
+        8. Always use the current authenticated user ID when calling user-related
+        tools.
+
+        9. Never claim that an action was completed unless the corresponding tool
+        successfully completed it.
+
+        10. If a tool returns an error or permission failure, clearly explain that
+            the action could not be completed.
+
+        11. Keep responses concise and practical.
+
+        12. When the user gives a short follow-up message, interpret it in the
+            context of the existing conversation rather than treating it as a
+            completely new request.
+        """
 
 
 TOOLS = [
@@ -94,7 +127,49 @@ TOOLS = [
                 "required": ["user_id"]
             }
         }
-    }
+    },
+    {
+    "type": "function",
+    "function": {
+        "name": "create_ticket",
+        "description": """
+        Create an IT support ticket for an employee.
+
+        Use this tool when the user explicitly requests a ticket.
+        The ticket does not require operating system, VPN version,
+        error message, start time, or troubleshooting history.
+
+        Use the information already available in the conversation
+        to create a concise ticket description.
+        """,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "user_id": {
+                            "type": "string",
+                            "description": "The ID of the current authenticated employee."
+                        },
+                        "category": {
+                            "type": "string",
+                            "description": "The category of the IT issue, such as VPN, Email, or WiFi."
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": """
+        A concise description of the user's problem.
+        Use the information already provided by the user.
+        Do not ask the user for additional troubleshooting details.
+        """
+                        }
+                    },
+                    "required": [
+                        "user_id",
+                        "category",
+                        "description"
+                    ]
+                }
+            }
+        }
 ]
 
 
@@ -114,97 +189,69 @@ def execute_tool(name, arguments):
         return get_user_permissions(
             arguments["user_id"]
         )
+    
+    if name == "create_ticket":
+        return create_ticket(
+            user_id=arguments["user_id"],
+            category=arguments["category"],
+            description=arguments["description"]
+        )
 
     return {
         "error": f"Unknown tool: {name}"
     }
 
-def generate_answer(question: str):
-
-    # -----------------------------
-    # 1. Retrieve company knowledge
-    # -----------------------------
-
+def generate_answer(question, messages):
+    # Retrieve relevant knowledge for this user message
     results = search_knowledge_base(
         query=question,
         top_k=6
     )
 
-    context_parts = []
-
-    for result in results:
-        context_parts.append(
-            f"Source: {result['source']}\n"
-            f"{result['text']}"
-        )
-
-    context = "\n\n---\n\n".join(
-        context_parts
+    context = "\n\n".join(
+        f"Source: {item['source']}\n{item['text']}"
+        for item in results
     )
 
-    # -----------------------------
-    # 2. Initial LLM request
-    # -----------------------------
-
     user_prompt = f"""
-Use the following company knowledge to help answer the user's question.
+Current authenticated user ID: {CURRENT_USER_ID}
 
-COMPANY KNOWLEDGE:
-
+Company knowledge:
 {context}
 
-USER QUESTION:
-
+User message:
 {question}
 """
 
-    messages = [
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT
-        },
-        {
-            "role": "user",
-            "content": user_prompt
-        }
-    ]
+    # Add the new user message to the existing conversation
+    messages.append({
+        "role": "user",
+        "content": user_prompt
+    })
 
-    # -----------------------------
-    # 3. Let the LLM decide
-    #    whether to call a tool
-    # -----------------------------
+    # Keep running until the LLM gives a normal answer
+    while True:
+        response = openai_client.chat.completions.create(
+            model=MODEL,
+            messages=messages,
+            tools=TOOLS,
+            tool_choice="auto",
+            temperature=0
+        )
 
-    response = openai_client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        tools=TOOLS,
-        tool_choice="auto",
-        temperature=0
-    )
+        assistant_message = response.choices[0].message
 
-    assistant_message = response.choices[0].message
-    if assistant_message.tool_calls:
-        for tool_call in assistant_message.tool_calls:
-            print(
-                f"\nLLM requested tool: {tool_call.function.name}"
-            )
-            print(
-                f"Arguments: {tool_call.function.arguments}"
-            )
-    # -----------------------------
-    # 4. No tool needed
-    # -----------------------------
+        # No tool call = final response
+        if not assistant_message.tool_calls:
+            messages.append({
+                "role": "assistant",
+                "content": assistant_message.content
+            })
 
-    if not assistant_message.tool_calls:
+            return assistant_message.content
 
-        return assistant_message.content
-
-    # -----------------------------
-    # 5. Tool call requested
-    # -----------------------------
-
-    messages.append(
-        {
+        # Add the assistant's tool request to conversation history
+        messages.append({
             "role": "assistant",
             "content": assistant_message.content,
             "tool_calls": [
@@ -218,54 +265,55 @@ USER QUESTION:
                 }
                 for tool_call in assistant_message.tool_calls
             ]
-        }
-    )
+        })
 
-    # -----------------------------
-    # 6. Execute each requested tool
-    # -----------------------------
+        print("\nLLM requested tool(s):")
 
-    for tool_call in assistant_message.tool_calls:
+        # Execute every requested tool
+        for tool_call in assistant_message.tool_calls:
 
-        tool_name = tool_call.function.name
+            tool_name = tool_call.function.name
+            arguments = json.loads(tool_call.function.arguments)
 
-        arguments = json.loads(
-            tool_call.function.arguments
-        )
+            print(f"Tool: {tool_name}")
+            print(f"Arguments: {arguments}")
 
-        tool_result = execute_tool(
-            tool_name,
-            arguments
-        )
-        print(f"Tool result: {tool_result}")
+            result = execute_tool(
+                tool_name,
+                arguments
+            )
 
-        messages.append(
-            {
+            print(f"Tool result: {result}")
+
+            # Give the tool result back to the LLM
+            messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
-                "content": json.dumps(tool_result)
-            }
-        )
-
-    # -----------------------------
-    # 7. Send tool result back
-    #    to the LLM
-    # -----------------------------
-
-    final_response = openai_client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        temperature=0
-    )
-
-    return final_response.choices[0].message.content
-
+                "content": json.dumps(result)
+            })
+        
 
 if __name__ == "__main__":
 
-    question = input("Ask OpsAI: ")
+    messages = [
+        {
+            "role": "system",
+            "content": SYSTEM_PROMPT
+        }
+    ]
 
-    answer = generate_answer(question)
+    while True:
 
-    print("\nOpsAI:")
-    print(answer)
+        question = input("\nAsk OpsAI: ")
+
+        if question.lower() in ["exit", "quit"]:
+            print("Goodbye!")
+            break
+
+        answer = generate_answer(
+            question,
+            messages
+        )
+
+        print("\nOpsAI:")
+        print(answer)

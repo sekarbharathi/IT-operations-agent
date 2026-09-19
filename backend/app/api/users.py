@@ -30,6 +30,21 @@ users = {
             "user.read",
             "admin.access"
         ]
+    },
+    "user_002": {
+            "id": "user_003",
+            "name": "Admin User",
+            "email": "admin@opsai.local",
+            "department": "IT",
+            "role": "it_admin",
+            "permissions": [
+                "knowledge.read",
+                
+                "vpn.check",
+                "incident.read",
+                "user.read",
+                
+            ]
     }
 }
 
