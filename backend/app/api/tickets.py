@@ -1,12 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.api.users import users
 
-router = APIRouter(
-    prefix="/api/tickets",
-    tags=["Tickets"]
-)
 
+router = APIRouter()
 
 tickets = {}
 
@@ -16,18 +14,25 @@ class TicketCreate(BaseModel):
     category: str
     description: str
 
-@router.get("")
-def get_tickets():
-    return list(tickets.values())
 
-@router.post("")
+@router.post("/api/tickets")
 def create_ticket(ticket: TicketCreate):
 
-    if not ticket.user_id:
-        raise HTTPException(
-            status_code=400,
-            detail="User ID is required"
-        )
+    # Check that the user exists
+    user = users.get(ticket.user_id)
+
+    if not user:
+        return {
+            "success": False,
+            "error": "User not found"
+        }
+
+    # Backend authorization check
+    if "ticket.create" not in user["permissions"]:
+        return {
+            "success": False,
+            "error": "User does not have permission to create tickets"
+        }
 
     ticket_id = f"ticket_{len(tickets) + 1:03d}"
 
@@ -41,18 +46,21 @@ def create_ticket(ticket: TicketCreate):
 
     tickets[ticket_id] = new_ticket
 
-    return new_ticket
+    return {
+        "success": True,
+        "ticket": new_ticket
+    }
 
 
-@router.get("/{ticket_id}")
+@router.get("/api/tickets/{ticket_id}")
 def get_ticket(ticket_id: str):
 
     ticket = tickets.get(ticket_id)
 
     if not ticket:
-        raise HTTPException(
-            status_code=404,
-            detail="Ticket not found"
-        )
+        return {
+            "success": False,
+            "error": "Ticket not found"
+        }
 
     return ticket

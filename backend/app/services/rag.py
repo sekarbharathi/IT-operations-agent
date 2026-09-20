@@ -24,7 +24,7 @@ openai_client = OpenAI(
 
 MODEL = "gpt-4o-mini"
 
-CURRENT_USER_ID = "user_001"
+CURRENT_USER_ID = "user_002"
 
 
 SYSTEM_PROMPT = """
@@ -66,13 +66,17 @@ SYSTEM_PROMPT = """
         successfully completed it.
 
         10. If a tool returns an error or permission failure, clearly explain that
-            the action could not be completed.
+        the action could not be completed.
 
         11. Keep responses concise and practical.
 
         12. When the user gives a short follow-up message, interpret it in the
-            context of the existing conversation rather than treating it as a
-            completely new request.
+        context of the existing conversation rather than treating it as a
+        completely new request.
+
+        13. If a tool returns an error or reports that a service is unavailable,
+        do not invent or assume the missing information. Clearly tell the user
+        that the requested information or action could not be completed.
         """
 
 
@@ -214,14 +218,14 @@ def generate_answer(question, messages):
     )
 
     user_prompt = f"""
-Current authenticated user ID: {CURRENT_USER_ID}
+        Current authenticated user ID: {CURRENT_USER_ID}
 
-Company knowledge:
-{context}
+        Company knowledge:
+        {context}
 
-User message:
-{question}
-"""
+        User message:
+        {question}
+    """
 
     # Add the new user message to the existing conversation
     messages.append({

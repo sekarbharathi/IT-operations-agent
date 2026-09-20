@@ -3,67 +3,88 @@ from app.api.users import users
 from app.api.tickets import tickets
 
 
-def check_service_incidents(service: str):
-
-    service_incidents = [
-        incident
-        for incident in incidents.values()
-        if incident["service"] == service
-    ]
-
-    return service_incidents
+import requests
 
 
-def get_user(user_id: str):
 
-    return users.get(user_id)
+BASE_URL = "http://127.0.0.1:8000"
 
 
-def get_user_permissions(user_id: str):
+def check_service_incidents(service):
+    try:
+        response = requests.get(
+            f"{BASE_URL}/api/incidents/{service}",
+            timeout=5
+        )
 
-    user = users.get(user_id)
+        response.raise_for_status()
 
-    if not user:
-        return None
+        return response.json()
 
-    return user["permissions"]
-
-def create_ticket(
-    user_id: str,
-    category: str,
-    description: str
-):
-    user = users.get(user_id)
-
-    if not user:
+    except requests.exceptions.RequestException as e:
         return {
             "success": False,
-            "error": "User not found"
+            "error": f"Incident service is unavailable: {str(e)}"
         }
 
-    if "ticket.create" not in user["permissions"]:
+
+def get_user(user_id):
+    try:
+        response = requests.get(
+            f"{BASE_URL}/api/users/{user_id}",
+            timeout=5
+        )
+
+        response.raise_for_status()
+
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
         return {
             "success": False,
-            "error": "User does not have permission to create tickets"
+            "error": f"User service is unavailable: {str(e)}"
         }
 
-    ticket_id = f"ticket_{len(tickets) + 1:03d}"
 
-    ticket = {
-        "id": ticket_id,
-        "user_id": user_id,
-        "category": category,
-        "description": description,
-        "status": "open"
-    }
+def get_user_permissions(user_id):
+    try:
+        response = requests.get(
+            f"{BASE_URL}/api/users/{user_id}/permissions",
+            timeout=5
+        )
 
-    tickets[ticket_id] = ticket
+        response.raise_for_status()
 
-    return {
-        "success": True,
-        "ticket": ticket
-    }
+        return response.json()
 
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "error": f"Permission service is unavailable: {str(e)}"
+        }
+
+
+def create_ticket(user_id, category, description):
+    try:
+        response = requests.post(
+            f"{BASE_URL}/api/tickets",
+            json={
+                "user_id": user_id,
+                "category": category,
+                "description": description
+            },
+            timeout=5
+        )
+
+        response.raise_for_status()
+
+        return response.json()
+
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "error": f"Ticket service is unavailable: {str(e)}"
+        }
 
 if __name__ == "__main__":
 
