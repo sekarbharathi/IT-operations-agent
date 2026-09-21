@@ -24,7 +24,7 @@ openai_client = OpenAI(
 
 MODEL = "gpt-4o-mini"
 
-CURRENT_USER_ID = "user_002"
+CURRENT_USER_ID = "user_003"
 
 
 SYSTEM_PROMPT = """
@@ -106,12 +106,9 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_id": {
-                        "type": "string",
-                        "description": "The ID of the employee."
-                    }
+                   
                 },
-                "required": ["user_id"]
+                "required": []
             }
         }
     },
@@ -123,12 +120,9 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_id": {
-                        "type": "string",
-                        "description": "The ID of the employee."
-                    }
+                    
                 },
-                "required": ["user_id"]
+                "required": []
             }
         }
     },
@@ -149,10 +143,6 @@ TOOLS = [
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "user_id": {
-                            "type": "string",
-                            "description": "The ID of the current authenticated employee."
-                        },
                         "category": {
                             "type": "string",
                             "description": "The category of the IT issue, such as VPN, Email, or WiFi."
@@ -160,14 +150,13 @@ TOOLS = [
                         "description": {
                             "type": "string",
                             "description": """
-        A concise description of the user's problem.
-        Use the information already provided by the user.
-        Do not ask the user for additional troubleshooting details.
-        """
+                                A concise description of the user's problem.
+                                Use the information already provided by the user.
+                                Do not ask the user for additional troubleshooting details.
+                                """
                         }
                     },
                     "required": [
-                        "user_id",
                         "category",
                         "description"
                     ]
@@ -177,7 +166,7 @@ TOOLS = [
 ]
 
 
-def execute_tool(name, arguments):
+def execute_tool(name, arguments, user_id):
 
     if name == "check_service_incidents":
         return check_service_incidents(
@@ -186,17 +175,17 @@ def execute_tool(name, arguments):
 
     if name == "get_user":
         return get_user(
-            arguments["user_id"]
+            user_id
         )
 
     if name == "get_user_permissions":
         return get_user_permissions(
-            arguments["user_id"]
+            user_id
         )
-    
+
     if name == "create_ticket":
         return create_ticket(
-            user_id=arguments["user_id"],
+            user_id=user_id,
             category=arguments["category"],
             description=arguments["description"]
         )

@@ -31,7 +31,7 @@ users = {
             "admin.access"
         ]
     },
-    "user_002": {
+    "user_003": {
             "id": "user_003",
             "name": "Admin User",
             "email": "admin@opsai.local",
