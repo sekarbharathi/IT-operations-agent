@@ -9,7 +9,9 @@ from app.services.tools import (
     check_service_incidents,
     get_user,
     get_user_permissions,
-    create_ticket
+    create_ticket,
+    get_employee,
+    get_all_employees
 )
 
 
@@ -24,7 +26,7 @@ openai_client = OpenAI(
 
 MODEL = "gpt-4o-mini"
 
-CURRENT_USER_ID = "user_003"
+CURRENT_USER_ID = "user_002"
 
 
 SYSTEM_PROMPT = """
@@ -77,6 +79,15 @@ SYSTEM_PROMPT = """
         13. If a tool returns an error or reports that a service is unavailable,
         do not invent or assume the missing information. Clearly tell the user
         that the requested information or action could not be completed.
+
+        17. When the user asks to list employees, list their employees,
+        or view employees they manage, always call get_all_employees.
+        Do not determine whether the user is authorized before calling
+        the tool. The backend applies the user's role and access scope.
+
+        18. Never assume that a request is unauthorized based only on
+        the wording of the request. Use the appropriate tool and let
+        the backend authorization result determine what can be returned.
         """
 
 
@@ -127,39 +138,86 @@ TOOLS = [
         }
     },
     {
-    "type": "function",
-    "function": {
-        "name": "create_ticket",
-        "description": """
-        Create an IT support ticket for an employee.
+        "type": "function",
+        "function": {
+            "name": "create_ticket",
+            "description": """
+            Create an IT support ticket for an employee.
 
-        Use this tool when the user explicitly requests a ticket.
-        The ticket does not require operating system, VPN version,
-        error message, start time, or troubleshooting history.
+            Use this tool when the user explicitly requests a ticket.
+            The ticket does not require operating system, VPN version,
+            error message, start time, or troubleshooting history.
 
-        Use the information already available in the conversation
-        to create a concise ticket description.
-        """,
+            Use the information already available in the conversation
+            to create a concise ticket description.
+            """,
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "category": {
+                                "type": "string",
+                                "description": "The category of the IT issue, such as VPN, Email, or WiFi."
+                            },
+                            "description": {
+                                "type": "string",
+                                "description": """
+                                    A concise description of the user's problem.
+                                    Use the information already provided by the user.
+                                    Do not ask the user for additional troubleshooting details.
+                                    """
+                            }
+                        },
+                        "required": [
+                            "category",
+                            "description"
+                        ]
+                    }
+                }
+            },
+        {
+        "type": "function",
+        "function": {
+            "name": "get_employee",
+            "description": """
+            Get information about a specific employee.
+
+            Use this when the user asks about another employee by user ID.
+
+            The backend determines whether the currently authenticated
+            user is allowed to view that employee.
+            """,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": "string",
+                        "description": "The ID of the employee to look up."
+                    }
+                },
+                "required": [
+                    "user_id"
+                ]
+            }
+        }
+    },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_all_employees",
+                "description": """
+                Get the employees that the currently authenticated user is
+                authorized to view.
+
+                Admins can view all employees.
+                Managers can view employees in their own team.
+                Employees can only view themselves.
+
+                The backend enforces these access rules.
+                """,
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "category": {
-                            "type": "string",
-                            "description": "The category of the IT issue, such as VPN, Email, or WiFi."
-                        },
-                        "description": {
-                            "type": "string",
-                            "description": """
-                                A concise description of the user's problem.
-                                Use the information already provided by the user.
-                                Do not ask the user for additional troubleshooting details.
-                                """
-                        }
-                    },
-                    "required": [
-                        "category",
-                        "description"
-                    ]
+                    "properties": {},
+                    "required": []
                 }
             }
         }
@@ -183,6 +241,17 @@ def execute_tool(name, arguments, user_id):
             user_id
         )
 
+    if name == "get_employee":
+        return get_employee(
+            target_user_id=arguments["user_id"],
+            requester_user_id=user_id
+        )
+
+    if name == "get_all_employees":
+        return get_all_employees(
+            requester_user_id=user_id
+        )
+
     if name == "create_ticket":
         return create_ticket(
             user_id=user_id,
@@ -193,6 +262,7 @@ def execute_tool(name, arguments, user_id):
     return {
         "error": f"Unknown tool: {name}"
     }
+
 
 def generate_answer(question, messages):
     # Retrieve relevant knowledge for this user message
