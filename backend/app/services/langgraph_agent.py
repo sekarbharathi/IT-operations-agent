@@ -12,41 +12,12 @@ from app.services.rag import (
     CURRENT_USER_ID
 )
 
-from app.services.retrieval import search_knowledge_base
 
 
 class AgentState(TypedDict):
     messages: list
     user_id: str
-    retrieved_context: str
 
-
-def retrieve_knowledge(state: AgentState):
-    """
-    Retrieve relevant company knowledge for the current user request.
-    The retrieved knowledge is stored separately from the conversation.
-    """
-
-    latest_user_message = ""
-
-    for message in reversed(state["messages"]):
-        if message["role"] == "user":
-            latest_user_message = message["content"]
-            break
-
-    results = search_knowledge_base(
-        query=latest_user_message,
-        top_k=6
-    )
-
-    context = "\n\n".join(
-        f"Source: {item['source']}\n{item['text']}"
-        for item in results
-    )
-
-    return {
-        "retrieved_context": context
-    }
 
 
 def call_model(state: AgentState):
@@ -54,16 +25,6 @@ def call_model(state: AgentState):
     # Build the messages sent to the LLM.
     messages = list(state["messages"])
 
-    # Add RAG context only for this LLM call.
-    if state["retrieved_context"]:
-        messages.append({
-            "role": "system",
-            "content": f"""
-Relevant company knowledge for the current request:
-
-{state["retrieved_context"]}
-"""
-        })
 
     response = openai_client.chat.completions.create(
         model=MODEL,
@@ -152,11 +113,6 @@ def build_agent():
     graph = StateGraph(AgentState)
 
     graph.add_node(
-        "retrieve_knowledge",
-        retrieve_knowledge
-    )
-
-    graph.add_node(
         "agent",
         call_model
     )
@@ -168,11 +124,6 @@ def build_agent():
 
     graph.add_edge(
         START,
-        "retrieve_knowledge"
-    )
-
-    graph.add_edge(
-        "retrieve_knowledge",
         "agent"
     )
 
@@ -221,7 +172,6 @@ if __name__ == "__main__":
         result = agent.invoke({
             "messages": messages,
             "user_id": CURRENT_USER_ID,
-            "retrieved_context": ""
         })
 
         messages = result["messages"]
