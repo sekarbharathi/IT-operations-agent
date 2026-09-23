@@ -11,7 +11,8 @@ from app.services.tools import (
     get_user_permissions,
     create_ticket,
     get_employee,
-    get_all_employees
+    get_all_employees,
+    get_ticket
 )
 
 
@@ -110,6 +111,16 @@ SYSTEM_PROMPT = """
             20. Do not call get_user_permissions before get_all_employees
                 or get_employee. Those tools perform their own backend authorization
                 using the authenticated user.
+
+            21. When the user asks about an existing ticket, asks whether a ticket
+                was created, or asks for the status or details of a ticket, use get_ticket
+                to retrieve the ticket from the backend.
+
+                22. If the user refers to "my ticket", use the ticket ID from the
+                conversation when one is available. Do not invent a ticket ID.
+
+                23. Do not claim that a ticket exists or provide its status based only
+                on conversation history when the ticket can be verified using get_ticket.
             """
 
 
@@ -226,6 +237,27 @@ TOOLS = [
                 }
             },
         {
+            "type": "function",
+            "function": {
+                "name": "get_ticket",
+                "description": (
+                    "Retrieve the details and current status of an existing IT support ticket. "
+                    "Use this when the user asks about a ticket, asks whether a ticket was created, "
+                    "or asks for the status/details of a ticket."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "ticket_id": {
+                            "type": "string",
+                            "description": "The ID of the ticket to retrieve."
+                        }
+                    },
+                    "required": ["ticket_id"]
+                }
+            }
+        },
+        {
         "type": "function",
         "function": {
             "name": "get_employee",
@@ -322,6 +354,12 @@ def execute_tool(name, arguments, user_id):
             user_id=user_id,
             category=arguments["category"],
             description=arguments["description"]
+        )
+    
+    if name == "get_ticket":
+        return get_ticket(
+            ticket_id=arguments["ticket_id"],
+            requester_user_id=user_id
         )
 
     return {
