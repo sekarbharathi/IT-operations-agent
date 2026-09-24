@@ -1,96 +1,55 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+
+from app.database.connection import get_db
+from app.database.models import User, Permission, UserPermission
+
 
 router = APIRouter(prefix="/api/users", tags=["Users"])
 
 
-users = {
-    "user_001": {
-        "id": "user_001",
-        "name": "Admin User",
-        "email": "admin@opsai.local",
-        "department": "IT",
-        "team": "IT Administration",
-        "role": "admin",
-        "permissions": [
-            "knowledge.read",
-            "ticket.create",
-            "vpn.check",
-            "incident.read",
-            "user.read"
-        ]
-    },
+def user_to_dict(user: User, db: Session):
+    permissions = (
+        db.query(Permission.name)
+        .join(
+            UserPermission,
+            Permission.id == UserPermission.permission_id
+        )
+        .filter(UserPermission.user_id == user.id)
+        .all()
+    )
 
-    "user_002": {
-        "id": "user_002",
-        "name": "Bharathi Sekar",
-        "email": "bharathi@opsai.local",
-        "department": "IT",
-        "team": "IT Operations",
-        "role": "manager",
-        "permissions": [
-            "knowledge.read",
-            "ticket.create",
-            "vpn.check",
-            "incident.read",
-            "user.read"
-        ]
-    },
-
-    "user_003": {
-        "id": "user_003",
-        "name": "Employee User",
-        "email": "employee@opsai.local",
-        "department": "IT",
-        "team": "IT Operations",
-        "role": "employee",
-        "permissions": [
-            "knowledge.read",
-            "ticket.create",
-            "vpn.check",
-            "incident.read"
-        ]
-    },
-
-    "user_004": {
-        "id": "user_004",
-        "name": "Team Member",
-        "email": "member@opsai.local",
-        "department": "IT",
-        "team": "IT Operations",
-        "role": "employee",
-        "permissions": [
-            "knowledge.read",
-            "ticket.create",
-            "vpn.check",
-            "incident.read"
-        ]
-    },
-
-    "user_005": {
-        "id": "user_005",
-        "name": "Another Employee",
-        "email": "employee2@opsai.local",
-        "department": "Finance",
-        "team": "Finance Applications",
-        "role": "employee",
-        "permissions": [
-            "knowledge.read",
-            "ticket.create"
-        ]
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "department": user.department,
+        "team": user.team,
+        "role": user.role,
+        "permissions": [permission[0] for permission in permissions]
     }
-}
 
 
 @router.get("")
-def get_allusers():
-    return list(users.values())
+def get_allusers(db: Session = Depends(get_db)):
+
+    users = db.query(User).all()
+
+    return [
+        user_to_dict(user, db)
+        for user in users
+    ]
+
 
 @router.get("/admin/{target_user_id}")
 def get_employee(
     target_user_id: str,
-    requester_id: str
+    requester_id: str,
+    db: Session = Depends(get_db)
 ):
-    requester = users.get(requester_id)
+    requester = db.query(User).filter(
+        User.id == requester_id
+    ).first()
 
     if not requester:
         return {
@@ -98,7 +57,9 @@ def get_employee(
             "error": "Requester not found"
         }
 
-    target = users.get(target_user_id)
+    target = db.query(User).filter(
+        User.id == target_user_id
+    ).first()
 
     if not target:
         return {
@@ -106,25 +67,26 @@ def get_employee(
             "error": "Employee not found"
         }
 
+    target_data = user_to_dict(target, db)
+
     # Admin can read anyone
-    if requester["role"] == "admin":
+    if requester.role == "admin":
         return {
             "success": True,
-            "user": target
+            "user": target_data
         }
-
 
     # Manager can read employees in their own team,
     # but not administrators
-    if requester["role"] == "manager":
+    if requester.role == "manager":
 
-        if target["role"] == "admin":
+        if target.role == "admin":
             return {
                 "success": False,
                 "error": "Managers cannot view administrators"
             }
 
-        if requester["team"] != target["team"]:
+        if requester.team != target.team:
             return {
                 "success": False,
                 "error": "Managers can only view employees in their own team"
@@ -132,14 +94,13 @@ def get_employee(
 
         return {
             "success": True,
-            "user": target
+            "user": target_data
         }
 
-
     # Employees can only read themselves
-    if requester["role"] == "employee":
+    if requester.role == "employee":
 
-        if requester["id"] != target["id"]:
+        if requester.id != target.id:
             return {
                 "success": False,
                 "error": "Requester does not have permission to view employees"
@@ -147,13 +108,18 @@ def get_employee(
 
         return {
             "success": True,
-            "user": target
+            "user": target_data
         }
 
-@router.get("/admin")
-def get_employees(requester_id: str):
 
-    requester = users.get(requester_id)
+@router.get("/admin")
+def get_employees(
+    requester_id: str,
+    db: Session = Depends(get_db)
+):
+    requester = db.query(User).filter(
+        User.id == requester_id
+    ).first()
 
     if not requester:
         return {
@@ -162,36 +128,55 @@ def get_employees(requester_id: str):
         }
 
     # Admin → all users
-    if requester["role"] == "admin":
+    if requester.role == "admin":
+
+        users = db.query(User).all()
+
         return {
             "success": True,
-            "users": list(users.values())
+            "users": [
+                user_to_dict(user, db)
+                for user in users
+            ]
         }
 
     # Manager → own team only
-    if requester["role"] == "manager":
+    if requester.role == "manager":
 
-        team_members = [
-                user
-                for user in users.values()
-                if user["team"] == requester["team"]
-                and user["role"] != "admin"
-            ]
+        team_members = (
+            db.query(User)
+            .filter(
+                User.team == requester.team,
+                User.role != "admin"
+            )
+            .all()
+        )
 
         return {
             "success": True,
-            "users": team_members
+            "users": [
+                user_to_dict(user, db)
+                for user in team_members
+            ]
         }
 
     # Employee → only themselves
     return {
         "success": True,
-        "users": [requester]
+        "users": [
+            user_to_dict(requester, db)
+        ]
     }
 
+
 @router.get("/{user_id}")
-def get_user(user_id: str):
-    user = users.get(user_id)
+def get_user(
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
 
     if not user:
         raise HTTPException(
@@ -199,12 +184,17 @@ def get_user(user_id: str):
             detail="User not found"
         )
 
-    return user
+    return user_to_dict(user, db)
 
 
 @router.get("/{user_id}/permissions")
-def get_user_permissions(user_id: str):
-    user = users.get(user_id)
+def get_user_permissions(
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    user = db.query(User).filter(
+        User.id == user_id
+    ).first()
 
     if not user:
         raise HTTPException(
@@ -212,8 +202,20 @@ def get_user_permissions(user_id: str):
             detail="User not found"
         )
 
+    permissions = (
+        db.query(Permission.name)
+        .join(
+            UserPermission,
+            Permission.id == UserPermission.permission_id
+        )
+        .filter(UserPermission.user_id == user_id)
+        .all()
+    )
+
     return {
         "user_id": user_id,
-        "permissions": user["permissions"]
+        "permissions": [
+            permission[0]
+            for permission in permissions
+        ]
     }
-

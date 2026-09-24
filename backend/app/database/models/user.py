@@ -13,3 +13,9 @@ class User(Base):
     department = Column(String, nullable=False)
     team = Column(String, nullable=False)
     role = Column(String, nullable=False)
+
+    permissions = relationship(
+        "Permission",
+        secondary="user_permissions",
+        back_populates="users"
+    )

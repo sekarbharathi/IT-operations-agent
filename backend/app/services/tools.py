@@ -1,8 +1,3 @@
-from app.api.incidents import incidents
-from app.api.users import users
-from app.api.tickets import tickets
-
-
 import requests
 
 
@@ -104,6 +99,67 @@ def get_ticket(ticket_id, requester_user_id):
             "success": False,
             "error": f"Ticket service is unavailable: {str(e)}"
         }
+
+def get_my_tickets(user_id):
+    try:
+        response = requests.get(
+            f"{BASE_URL}/api/tickets",
+            params={"user_id": user_id},
+            timeout=5
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "error": f"Ticket service is unavailable: {str(e)}"
+        }
+
+
+def get_team_tickets(user_id):
+    try:
+        response = requests.get(
+            f"{BASE_URL}/api/tickets/team",
+            params={"requester_id": user_id},
+            timeout=5
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "error": f"Ticket service is unavailable: {str(e)}"
+        }
+
+def get_employee_tickets(employee_id, requester_id):
+    try:
+        response = requests.get(
+            f"{BASE_URL}/api/tickets/employee/{employee_id}",
+            params={"requester_id": requester_id},
+            timeout=5
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "error": f"Ticket service is unavailable: {str(e)}"
+        }
+
+def get_all_tickets(user_id):
+    try:
+        response = requests.get(
+            f"{BASE_URL}/api/tickets/all",
+            params={"requester_id": user_id},
+            timeout=5
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "error": f"Ticket service is unavailable: {str(e)}"
+        }
     
 def get_employee(target_user_id, requester_user_id):
     try:
@@ -142,6 +198,7 @@ def get_all_employees(requester_user_id):
             "success": False,
             "error": f"User service is unavailable: {str(e)}"
         }
+        
 
 
     

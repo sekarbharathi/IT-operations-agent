@@ -1,4 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+
+from app.database.connection import get_db
+from app.database.models import Incident
+
 
 router = APIRouter(
     prefix="/api/incidents",
@@ -6,44 +11,47 @@ router = APIRouter(
 )
 
 
-incidents = {
-    "incident_001": {
-        "id": "incident_001",
-        "service": "vpn",
-        "status": "resolved",
-        "severity": "medium",
-        "title": "VPN authentication failures",
-        "description": "Some users experienced authentication failures.",
-    },
-    "incident_002": {
-        "id": "incident_002",
-        "service": "email",
-        "status": "active",
-        "severity": "high",
-        "title": "Email delivery delays",
-        "description": "Some emails are currently experiencing delays.",
+def incident_to_dict(incident: Incident):
+    return {
+        "id": incident.id,
+        "service": incident.service,
+        "status": incident.status,
+        "severity": incident.severity,
+        "title": incident.title,
+        "description": incident.description,
     }
-}
 
 
 @router.get("")
-def get_incidents():
-    return list(incidents.values())
+def get_incidents(
+    db: Session = Depends(get_db)
+):
+    incidents = db.query(Incident).all()
+
+    return [
+        incident_to_dict(incident)
+        for incident in incidents
+    ]
 
 
 @router.get("/{service}")
-def get_service_incidents(service: str):
+def get_service_incidents(
+    service: str,
+    db: Session = Depends(get_db)
+):
+    incidents = (
+        db.query(Incident)
+        .filter(Incident.service == service)
+        .all()
+    )
 
-    service_incidents = []
-
-    for incident in incidents.values():
-        if incident["service"] == service:
-            service_incidents.append(incident)
-
-    if not service_incidents:
+    if not incidents:
         raise HTTPException(
             status_code=404,
             detail="No incidents found for this service"
         )
 
-    return service_incidents
+    return [
+        incident_to_dict(incident)
+        for incident in incidents
+    ]
