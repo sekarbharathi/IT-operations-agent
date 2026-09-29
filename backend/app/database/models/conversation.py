@@ -9,8 +9,24 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user_id = Column(
+        String,
+        ForeignKey("users.id"),
+        nullable=False
+    )
+
+    title = Column(
+        String(200),
+        nullable=True
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False
+    )
+
     updated_at = Column(
         DateTime,
         default=datetime.utcnow,

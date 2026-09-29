@@ -5,8 +5,18 @@ from app.api.incidents import router as incidents_router
 from app.api.tickets import router as tickets_router
 from app.api.chat import router as chat_router
 
+from fastapi.middleware.cors import CORSMiddleware
+
 
 app = FastAPI(title="OpsAI")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 app.include_router(users_router)

@@ -77,9 +77,10 @@ def chat(
         conversation_id = str(uuid.uuid4())
 
         conversation = Conversation(
-            id=conversation_id,
-            user_id=CURRENT_USER_ID
-        )
+                    id=conversation_id,
+                    user_id=CURRENT_USER_ID,
+                    title=request.message[:200]
+                )
 
         db.add(conversation)
         db.flush()
@@ -181,4 +182,71 @@ def chat(
         "conversation_id": conversation_id,
         "user_id": CURRENT_USER_ID,
         "response": answer
+    }
+
+@router.get("/conversations")
+def get_conversations(
+    db: Session = Depends(get_db)
+):
+    conversations = (
+        db.query(Conversation)
+        .filter(Conversation.user_id == CURRENT_USER_ID)
+        .order_by(Conversation.updated_at.desc())
+        .all()
+    )
+
+    return {
+    "success": True,
+    "conversations": [
+            {
+                "conversation_id": conversation.id,
+                "title": conversation.title or "New conversation",
+                "created_at": conversation.created_at,
+                "updated_at": conversation.updated_at
+            }
+            for conversation in conversations
+        ]
+    }
+
+
+@router.get("/{conversation_id}/messages")
+def get_conversation_messages(
+    conversation_id: str,
+    db: Session = Depends(get_db)
+):
+    conversation = (
+        db.query(Conversation)
+        .filter(
+            Conversation.id == conversation_id,
+            Conversation.user_id == CURRENT_USER_ID
+        )
+        .first()
+    )
+
+    if not conversation:
+        return {
+            "success": False,
+            "error": "Conversation not found"
+        }
+
+    messages = (
+        db.query(ConversationMessage)
+        .filter(
+            ConversationMessage.conversation_id == conversation_id
+        )
+        .order_by(ConversationMessage.created_at.asc())
+        .all()
+    )
+
+    return {
+        "success": True,
+        "conversation_id": conversation_id,
+        "messages": [
+            {
+                "role": message.role,
+                "content": message.content,
+                "created_at": message.created_at
+            }
+            for message in messages
+        ]
     }
