@@ -255,21 +255,194 @@
   {
     "id": "RAG-001",
     "category": "rag",
-    "description": "User asks for troubleshooting guidance.",
+    "description": "VPN troubleshooting query retrieves relevant knowledge.",
     "user_id": "user_003",
     "input": "How should I troubleshoot my VPN problem?",
     "expected": {
-      "tool": "search_knowledge_base"
+      "tool": "search_knowledge_base",
+      "rag_source": "vpn_troubleshooting.md"
     }
   },
   {
     "id": "RAG-002",
     "category": "rag",
-    "description": "User asks for help with an operational issue.",
+    "description": "VPN connection query retrieves relevant knowledge.",
     "user_id": "user_003",
     "input": "What should I check if I cannot connect to the VPN?",
     "expected": {
-      "tool": "search_knowledge_base"
+      "tool": "search_knowledge_base",
+      "rag_source": "vpn_troubleshooting.md"
     }
-  }
+  },
+  {
+    "id": "RAG-003",
+    "category": "rag",
+    "description": "VPN troubleshooting steps retrieve the VPN troubleshooting document.",
+    "user_id": "user_003",
+    "input": "What are the steps for troubleshooting a VPN connection?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "vpn_troubleshooting.md"
+    }
+  },
+  {
+    "id": "RAG-004",
+    "category": "rag",
+    "description": "Unrelated payroll question should not retrieve knowledge-base documents.",
+    "user_id": "user_003",
+    "input": "How do I troubleshoot a payroll problem?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_no_results": true
+    }
+  },
+  {
+    "id": "RAG-005",
+    "category": "rag",
+    "description": "VPN support ticket query retrieves VPN troubleshooting guidance.",
+    "user_id": "user_003",
+    "input": "What information should I include when creating a VPN support ticket?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "vpn_troubleshooting.md",
+      "rag_contains": "Operating system"
+    }
+  },
+  {
+    "id": "RAG-006",
+    "category": "rag",
+    "description": "VPN answer should be grounded in retrieved documentation.",
+    "user_id": "user_003",
+    "input": "What should I do if my VPN is not connecting?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "vpn_troubleshooting.md",
+      "final_answer_contains_any": [
+        "internet",
+        "VPN client",
+        "credentials",
+        "restart",
+        "incident"
+      ]
+    }
+  },
+  {
+    "id": "RAG-007",
+    "category": "rag",
+    "description": "VPN answer should not invent unsupported troubleshooting steps.",
+    "user_id": "user_003",
+    "input": "Give me the troubleshooting steps for my VPN problem.",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "vpn_troubleshooting.md",
+      "final_answer_not_contains": [
+        "reinstall the VPN client",
+        "change your DNS",
+        "flush DNS",
+        "disable your firewall"
+      ]
+    }
+  },
+  {
+    "id": "RAG-008",
+    "category": "rag",
+    "description": "Password reset query retrieves password reset documentation.",
+    "user_id": "user_003",
+    "input": "How do I reset my company password?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "password_reset.md"
+    }
+  },
+  {
+    "id": "RAG-009",
+    "category": "rag",
+    "description": "Forgotten password query retrieves password reset documentation.",
+    "user_id": "user_003",
+    "input": "I forgot my password. What should I do?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "password_reset.md"
+    }
+  },
+  {
+    "id": "RAG-010",
+    "category": "rag",
+    "description": "Dashboard access query retrieves dashboard access documentation.",
+    "user_id": "user_003",
+    "input": "How can I get access to the company dashboard?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "dashboard_access.md"
+    }
+  },
+  {
+    "id": "RAG-011",
+    "category": "rag",
+    "description": "Dashboard access problem retrieves dashboard access documentation.",
+    "user_id": "user_003",
+    "input": "I cannot access the dashboard. What should I check?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "dashboard_access.md"
+    }
+  },
+  {
+    "id": "RAG-012",
+    "category": "rag",
+    "description": "Wi-Fi troubleshooting query retrieves Wi-Fi troubleshooting documentation.",
+    "user_id": "user_003",
+    "input": "How should I troubleshoot my Wi-Fi connection?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "wifi_troubleshooting.md"
+    }
+  },
+  {
+    "id": "RAG-013",
+    "category": "rag",
+    "description": "VPN policy query retrieves VPN policy documentation.",
+    "user_id": "user_003",
+    "input": "What is the company policy for using VPN?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "vpn_policy.md"
+    }
+  },
+  {
+    "id": "RAG-014",
+    "category": "rag",
+    "description": "Password query should not retrieve unrelated VPN troubleshooting documentation.",
+    "user_id": "user_003",
+    "input": "I forgot my company password. How do I reset it?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "password_reset.md",
+      "rag_source_not": "vpn_troubleshooting.md"
+    }
+  },
+  {
+    "id": "RAG-015",
+    "category": "rag",
+    "description": "Wi-Fi query should not retrieve unrelated VPN troubleshooting documentation.",
+    "user_id": "user_003",
+    "input": "My Wi-Fi connection is not working. What should I do?",
+    "expected": {
+      "tool": "search_knowledge_base",
+      "rag_source": "wifi_troubleshooting.md",
+      "rag_source_not": "vpn_troubleshooting.md"
+    }
+  },
+  {
+    "id": "RAG-016",
+    "category": "rag",
+    "description": "VPN policy query should retrieve policy documentation instead of troubleshooting documentation.",
+    "user_id": "user_003",
+    "input": "What are the rules for using the company VPN?",
+    "expected": {
+        "tool": "search_knowledge_base",
+        "rag_source": "vpn_policy.md",
+        "rag_source_not": "vpn_troubleshooting.md"
+    }
+    }
 ]

@@ -40,7 +40,8 @@ def create_query_embedding(query: str):
 
 def search_knowledge_base(
     query: str,
-    top_k: int = 3
+    top_k: int = 3,
+    score_threshold: float = 0.50
 ):
     query_embedding = create_query_embedding(query)
 
@@ -53,11 +54,12 @@ def search_knowledge_base(
     matches = []
 
     for match in results.matches:
-        matches.append({
-            "score": match.score,
-            "source": match.metadata.get("source"),
-            "text": match.metadata.get("text")
-        })
+        if match.score >= score_threshold:
+            matches.append({
+                "score": match.score,
+                "source": match.metadata.get("source"),
+                "text": match.metadata.get("text")
+            })
 
     return matches
 

@@ -179,25 +179,6 @@ def _evaluate_incident_status(
     return False
 
 
-def _evaluate_rag_result(
-    result,
-    expected_source,
-):
-    if not isinstance(result, list):
-        return False
-
-    if not result:
-        return False
-
-    if not expected_source:
-        return True
-
-    return any(
-        isinstance(item, dict)
-        and item.get("source") == expected_source
-        for item in result
-    )
-
 
 def evaluate_tool_result(
     tool_results,
@@ -332,6 +313,18 @@ def evaluate_final_answer(
         "final_answer_contains",
         [],
     )
+    contains_any = expected.get(
+        "final_answer_contains_any",
+        [],
+    )
+
+    if contains_any:
+        answer_lower = final_answer.lower()
+
+        checks["contains_any"] = any(
+            phrase.lower() in answer_lower
+            for phrase in contains_any
+        )
 
     if isinstance(contains, str):
         contains = [contains]
@@ -372,6 +365,73 @@ def evaluate_final_answer(
         "answer": final_answer,
     }
 
+def evaluate_rag_result(
+    tool_results,
+    expected,
+):
+    rag_results = []
+
+    for result in tool_results:
+        if isinstance(result, list):
+            rag_results.extend(result)
+        elif isinstance(result, dict):
+            rag_results.append(result)
+
+    checks = {}
+
+    # Some RAG queries are expected to return
+    # no relevant documents.
+    if expected.get("rag_no_results"):
+        checks["no_results"] = len(rag_results) == 0
+
+    # Other RAG queries must return at least one result.
+    elif not rag_results:
+        return {
+            "passed": False,
+            "reason": "No RAG results found",
+        }
+
+    else:
+        checks["result_found"] = True
+
+    expected_source = expected.get("rag_source")
+
+    if expected_source:
+        checks["expected_source"] = any(
+            isinstance(item, dict)
+            and item.get("source") == expected_source
+            for item in rag_results
+        )
+
+    forbidden_source = expected.get("rag_source_not")
+
+    if forbidden_source:
+        checks["forbidden_source_absent"] = not any(
+            isinstance(item, dict)
+            and item.get("source") == forbidden_source
+            for item in rag_results
+        )
+
+    expected_text = expected.get("rag_contains")
+
+    if expected_text:
+        combined_text = " ".join(
+            item.get("text", "")
+            for item in rag_results
+            if isinstance(item, dict)
+        )
+
+        checks["expected_content"] = (
+            expected_text.lower()
+            in combined_text.lower()
+        )
+
+    return {
+        "passed": all(checks.values()),
+        "checks": checks,
+        "results": rag_results,
+    }
+
 
 def evaluate_case(
     messages,
@@ -379,7 +439,6 @@ def evaluate_case(
     final_answer="",
 ):
     tool_calls = extract_tool_calls(messages)
-
     tool_results = extract_tool_results(messages)
 
     expected_tool = expected.get("tool")
@@ -405,9 +464,12 @@ def evaluate_case(
         arguments_were_specified,
     )
 
-    # If this is a clarification-only test, there may
-    # intentionally be no tool result.
-    if expected_tool is None:
+    if expected_tool == "search_knowledge_base":
+        result_check = evaluate_rag_result(
+            tool_results,
+            expected,
+        )
+    elif expected_tool is None:
         result_check = {
             "passed": True,
             "skipped": True,

@@ -56,11 +56,6 @@ def run_case(test_case):
         }
     )
 
-    evaluation = evaluate_case(
-        result["messages"],
-        test_case["expected"],
-    )
-
     final_answer = next(
         (
             message.get("content", "")
@@ -69,6 +64,12 @@ def run_case(test_case):
             and message.get("content")
         ),
         "",
+    )
+
+    evaluation = evaluate_case(
+        result["messages"],
+        test_case["expected"],
+        final_answer,
     )
 
     return {
