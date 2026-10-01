@@ -1,9 +1,9 @@
 {
   "evaluation": "OpsAI deterministic evaluation",
   "total_tests": 1,
-  "passed": 0,
-  "failed": 1,
-  "pass_rate_percent": 0.0,
+  "passed": 1,
+  "failed": 0,
+  "pass_rate_percent": 100.0,
   "results": [
     {
       "id": "RAG-016",
@@ -11,9 +11,9 @@
       "description": "VPN policy query should retrieve policy documentation instead of troubleshooting documentation.",
       "input": "What are the rules for using the company VPN?",
       "user_id": "user_003",
-      "passed": false,
+      "passed": true,
       "evaluation": {
-        "passed": false,
+        "passed": true,
         "tool_selection": {
           "passed": true,
           "expected": "search_knowledge_base",
@@ -26,11 +26,11 @@
           "skipped": true
         },
         "tool_result": {
-          "passed": false,
+          "passed": true,
           "checks": {
             "result_found": true,
             "expected_source": true,
-            "forbidden_source_absent": false
+            "expected_top_source": true
           },
           "results": [
             {

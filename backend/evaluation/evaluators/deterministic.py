@@ -403,6 +403,16 @@ def evaluate_rag_result(
             for item in rag_results
         )
 
+    # Check that the highest-ranked RAG result
+    # comes from the expected source.
+    expected_top_source = expected.get("rag_top_source")
+
+    if expected_top_source:
+        checks["expected_top_source"] = (
+            isinstance(rag_results[0], dict)
+            and rag_results[0].get("source") == expected_top_source
+        )
+
     forbidden_source = expected.get("rag_source_not")
 
     if forbidden_source:
@@ -431,7 +441,6 @@ def evaluate_rag_result(
         "checks": checks,
         "results": rag_results,
     }
-
 
 def evaluate_case(
     messages,

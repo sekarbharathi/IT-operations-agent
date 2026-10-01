@@ -1,0 +1,102 @@
+{
+  "evaluation": "OpsAI multi-turn evaluation",
+  "total_tests": 5,
+  "passed": 5,
+  "failed": 0,
+  "pass_rate_percent": 100.0,
+  "results": [
+    {
+      "id": "MULTI-001",
+      "category": "multi_turn",
+      "description": "Agent troubleshoots the user's VPN problem using the knowledge base before checking for a service incident.",
+      "passed": true,
+      "tool_calls": [
+        "search_knowledge_base"
+      ],
+      "checks": {
+        "required_tools": {
+          "search_knowledge_base": true
+        },
+        "forbidden_tools": {
+          "create_ticket": true
+        }
+      },
+      "final_answer": "Here are some troubleshooting steps you can follow for your VPN connection issue:\n\n1. **Check your internet connection**: Ensure your device has a working internet connection by visiting a normal website.\n\n2. **Restart the VPN client**: Close the VPN application completely, then reopen it and try connecting again.\n\n3. **Check VPN credentials**: Make sure you are using your company account credentials correctly.\n\n4. **Restart your device**: If the VPN still does not connect, restart your computer and try again.\n\n5. **Check for an active incident**: If the problem continues, there may be an active company-wide VPN incident.\n\nWould you like me to check for any active incidents affecting the VPN service?"
+    },
+    {
+      "id": "MULTI-002",
+      "category": "multi_turn",
+      "description": "Agent uses the knowledge base when the user asks what to check first for the VPN problem.",
+      "passed": true,
+      "tool_calls": [
+        "search_knowledge_base"
+      ],
+      "checks": {
+        "required_tools": {
+          "search_knowledge_base": true
+        },
+        "forbidden_tools": {
+          "create_ticket": true
+        }
+      },
+      "final_answer": "It's best to start with the following steps:\n\n1. **Check your internet connection**: Make sure your device can access the internet by visiting a normal website.\n\n2. **Restart the VPN client**: Close the VPN application completely, then reopen it and try connecting again.\n\nAfter these steps, if you're still having issues, you can check your VPN credentials and restart your device. If the problem persists, I can check for any active incidents affecting the VPN service."
+    },
+    {
+      "id": "MULTI-003",
+      "category": "multi_turn",
+      "description": "After the user has already followed the troubleshooting steps and the problem remains, the agent checks for an active service incident.",
+      "passed": true,
+      "tool_calls": [
+        "search_knowledge_base",
+        "check_service_incidents"
+      ],
+      "checks": {
+        "required_tools": {
+          "search_knowledge_base": true,
+          "check_service_incidents": true
+        },
+        "forbidden_tools": {
+          "create_ticket": true
+        }
+      },
+      "final_answer": "There was a recent incident related to VPN authentication failures, but it has been resolved. Since you've already followed the troubleshooting steps and the issue persists, would you like me to create a support ticket for you?"
+    },
+    {
+      "id": "MULTI-004",
+      "category": "multi_turn",
+      "description": "Agent creates a support ticket only after the user explicitly requests one following troubleshooting and incident checking.",
+      "passed": true,
+      "tool_calls": [
+        "search_knowledge_base",
+        "check_service_incidents",
+        "create_ticket"
+      ],
+      "checks": {
+        "required_tools": {
+          "search_knowledge_base": true,
+          "check_service_incidents": true,
+          "create_ticket": true
+        },
+        "forbidden_tools": {}
+      },
+      "final_answer": "A support ticket has been successfully created for your VPN connection issue. Here are the details:\n\n- **Ticket ID**: ticket_015\n- **Category**: VPN\n- **Description**: User is unable to connect to the VPN despite following troubleshooting steps.\n- **Status**: Open\n\nYou will be notified once there are updates on your ticket. If you need further assistance, feel free to ask!"
+    },
+    {
+      "id": "MULTI-005",
+      "category": "multi_turn",
+      "description": "Agent uses the authenticated user's authorization context and does not repeat an all-tickets lookup when the information is already available.",
+      "passed": true,
+      "tool_calls": [
+        "get_all_tickets"
+      ],
+      "checks": {
+        "required_tools": {
+          "get_all_tickets": true
+        },
+        "forbidden_tools": {},
+        "max_tool_calls": true
+      },
+      "final_answer": "The backend has determined that you do not have the necessary permissions to view all tickets. If you have any other requests or need assistance with something specific, please let me know!"
+    }
+  ]
+}
