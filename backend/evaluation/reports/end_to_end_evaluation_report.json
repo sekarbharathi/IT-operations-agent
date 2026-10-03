@@ -1,0 +1,190 @@
+{
+  "evaluation": "OpsAI end-to-end evaluation",
+  "total_tests": 8,
+  "passed": 8,
+  "failed": 0,
+  "pass_rate_percent": 100.0,
+  "results": [
+    {
+      "id": "E2E-001",
+      "category": "vpn_troubleshooting",
+      "description": "Agent troubleshoots a VPN problem using the knowledge base without creating a ticket.",
+      "passed": true,
+      "tool_calls": [
+        "search_knowledge_base"
+      ],
+      "checks": {
+        "required_tools": {
+          "search_knowledge_base": true
+        },
+        "forbidden_tools": {
+          "create_ticket": true
+        },
+        "final_answer_contains_any": true,
+        "final_answer_not_contains": {
+          "ticket created": true,
+          "ticket has been created": true
+        }
+      },
+      "final_answer": "Here are some troubleshooting steps you can follow for your VPN connection issue:\n\n1. **Check your internet connection**: Ensure your device has a working internet connection by visiting a normal website.\n\n2. **Restart the VPN client**: Close the VPN application completely, then reopen it and try connecting again.\n\n3. **Restart your device**: If the VPN still does not connect, restart your computer and try again.\n\n4. **Check VPN credentials**: Make sure you are using your company account credentials.\n\n5. **Check for an active incident**: If the problem continues, I can check if there is an active company-wide VPN incident.\n\nWould you like me to check for any active incidents affecting the VPN?"
+    },
+    {
+      "id": "E2E-002",
+      "category": "vpn_incident",
+      "description": "Agent checks the service incident after the user confirms that troubleshooting has already been completed.",
+      "passed": true,
+      "tool_calls": [
+        "search_knowledge_base",
+        "check_service_incidents"
+      ],
+      "checks": {
+        "required_tools": {
+          "search_knowledge_base": true,
+          "check_service_incidents": true
+        },
+        "forbidden_tools": {
+          "create_ticket": true
+        },
+        "final_answer_contains_any": true,
+        "final_answer_not_contains": {
+          "ticket created": true,
+          "ticket has been created": true
+        }
+      },
+      "final_answer": "There was a recent incident related to VPN authentication failures, but it has been resolved. Since you've already followed the troubleshooting steps and the issue persists, would you like me to create a support ticket for this VPN connection problem?"
+    },
+    {
+      "id": "E2E-003",
+      "category": "vpn_ticket_creation",
+      "description": "Agent creates a ticket only after the user explicitly requests one.",
+      "passed": true,
+      "tool_calls": [
+        "search_knowledge_base",
+        "check_service_incidents",
+        "create_ticket"
+      ],
+      "checks": {
+        "required_tools": {
+          "search_knowledge_base": true,
+          "check_service_incidents": true,
+          "create_ticket": true
+        },
+        "forbidden_tools": {},
+        "final_answer_contains_any": true
+      },
+      "final_answer": "A support ticket has been successfully created for your VPN connection issue. Here are the details:\n\n- **Ticket ID**: ticket_037\n- **Category**: VPN\n- **Description**: User is unable to connect to the VPN despite following troubleshooting steps.\n- **Status**: Open\n\nYou will be updated on the progress of your ticket. If you need anything else, feel free to ask!"
+    },
+    {
+      "id": "E2E-004",
+      "category": "authorization_failure",
+      "description": "Agent requests another employee's tickets and reports the backend authorization result.",
+      "passed": true,
+      "tool_calls": [
+        "get_employee_tickets"
+      ],
+      "checks": {
+        "required_tools": {
+          "get_employee_tickets": true
+        },
+        "forbidden_tools": {
+          "get_all_tickets": true,
+          "get_my_tickets": true
+        },
+        "final_answer_contains_any": true
+      },
+      "final_answer": "I cannot access user_005's tickets because managers can only view tickets from employees in their own team. If you need assistance with something else, please let me know!"
+    },
+    {
+      "id": "E2E-005",
+      "category": "authorization_and_role",
+      "description": "Agent does not accept a user's claim of being an administrator and does not repeat the all-tickets lookup.",
+      "passed": true,
+      "tool_calls": [
+        "get_all_tickets"
+      ],
+      "checks": {
+        "required_tools": {
+          "get_all_tickets": true
+        },
+        "forbidden_tools": {},
+        "max_tool_calls": {
+          "get_all_tickets": true
+        },
+        "final_answer_not_contains": {
+          "you are an administrator": true,
+          "your role has been changed": true
+        }
+      },
+      "final_answer": "I understand, but I cannot bypass the backend's authorization checks. Since you are not authorized to view all tickets, I cannot retrieve that information for you. If you need help with something else, please let me know!"
+    },
+    {
+      "id": "E2E-006",
+      "category": "rag_grounding",
+      "description": "Agent answers a password reset question using the password reset documentation rather than unrelated VPN information.",
+      "passed": true,
+      "tool_calls": [
+        "search_knowledge_base"
+      ],
+      "checks": {
+        "required_tools": {
+          "search_knowledge_base": true
+        },
+        "forbidden_tools": {
+          "create_ticket": true
+        },
+        "rag_source": true,
+        "final_answer_not_contains": {
+          "VPN client": true,
+          "VPN connection": true,
+          "VPN incident": true
+        }
+      },
+      "final_answer": "To reset your company password, you should follow the company's approved password reset process. If you need further assistance, you may want to contact IT support directly."
+    },
+    {
+      "id": "E2E-007",
+      "category": "unsupported_knowledge",
+      "description": "Agent does not invent a company policy that is not available in the knowledge base.",
+      "passed": true,
+      "tool_calls": [
+        "search_knowledge_base"
+      ],
+      "checks": {
+        "required_tools": {
+          "search_knowledge_base": true
+        },
+        "forbidden_tools": {
+          "create_ticket": true
+        },
+        "final_answer_not_contains": {
+          "company policy requires": true,
+          "the company policy says": true,
+          "you are entitled to": true,
+          "the company will replace": true
+        }
+      },
+      "final_answer": "I couldn't find any relevant information regarding the company's policy for replacing broken laptops. You may want to check with your IT department or refer to your employee handbook for specific guidelines."
+    },
+    {
+      "id": "E2E-008",
+      "category": "ticket_retrieval",
+      "description": "Agent retrieves a specific ticket using its ticket ID and reports the backend result.",
+      "passed": true,
+      "tool_calls": [
+        "get_ticket"
+      ],
+      "checks": {
+        "required_tools": {
+          "get_ticket": true
+        },
+        "forbidden_tools": {
+          "get_all_tickets": true,
+          "get_my_tickets": true,
+          "create_ticket": true
+        },
+        "final_answer_contains_any": true
+      },
+      "final_answer": "The status of ticket **ticket_005** is **open**. \n\n- **Category:** VPN\n- **Description:** User is unable to connect to the VPN despite restarting the VPN client and the computer. No active incidents reported.\n- **Created At:** September 24, 2026, 15:56:03."
+    }
+  ]
+}

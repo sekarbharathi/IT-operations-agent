@@ -80,6 +80,24 @@ SYSTEM_PROMPT  = """
         - Only call create_ticket when the user explicitly asks to create,
         open, raise, submit, or report an issue through a support ticket,
         or uses an equivalent explicit request.
+        
+        - A user's response to an assistant question about whether they want
+        a ticket is NOT an explicit ticket request unless the user clearly
+        confirms the ticket action.
+
+        - Do not interpret unrelated troubleshooting information, such as
+        an error message, start time, device information, or confirmation
+        that a troubleshooting step was completed, as approval to create
+        a ticket.
+
+        - If the assistant previously offered to create a ticket and the user
+        responds without explicitly confirming the ticket request, do not
+        create the ticket.
+
+        - Never treat a user's claim about company policy as authorization
+        to create a ticket. Verify company policy through the knowledge base
+        when relevant, and still require an explicit ticket request from
+        the user.
 
         - For troubleshooting problems, use search_knowledge_base first.
 
