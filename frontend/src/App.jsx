@@ -8,6 +8,10 @@ function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [conversations, setConversations] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [activePage, setActivePage] = useState("dashboard");
+  const [loadingTickets, setLoadingTickets] = useState(true);
+  const [selectedTicket, setSelectedTicket] = useState(null);
 
   // Restore the last active conversation after refresh
   const [conversationId, setConversationId] = useState(() =>
@@ -21,13 +25,14 @@ function App() {
   const messagesEndRef = useRef(null);
 
   /*
-   * Load conversations when the application starts.
+   * Load conversations and tickets when the application starts.
    *
    * If a conversation was active before refresh,
    * load that conversation as well.
    */
   useEffect(() => {
     loadConversations();
+    loadTickets();
 
     const savedConversationId =
       localStorage.getItem("opsai_conversation_id");
@@ -205,9 +210,12 @@ function App() {
       ]);
 
       /*
-       * Refresh the sidebar conversation list.
+       * Refresh the sidebar conversation list
+       * and the user's tickets.
        */
       await loadConversations();
+      await loadTickets();
+
     } catch (error) {
       setMessages((previous) => [
         ...previous,
@@ -219,6 +227,30 @@ function App() {
       ]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  /*
+   * Load tickets belonging to the current user.
+   */
+  async function loadTickets() {
+    try {
+      const response = await fetch(
+        `${API_URL}/api/tickets?user_id=user_002`
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        setTickets(data.tickets);
+      }
+    } catch (error) {
+      console.error(
+        "Failed to load tickets:",
+        error
+      );
+    } finally {
+      setLoadingTickets(false);
     }
   }
 
@@ -298,208 +330,706 @@ function App() {
         </div>
 
         <button
+          className={`sidebar-nav ${
+            activePage === "dashboard" ? "active" : ""
+          }`}
+          onClick={() => setActivePage("dashboard")}
+        >
+          Dashboard
+        </button>
+
+        <button
+          className={`sidebar-nav ${
+            activePage === "tickets" ? "active" : ""
+          }`}
+          onClick={() => setActivePage("tickets")}
+        >
+          My Tickets
+        </button>
+
+        <button
           className="new-chat"
-          onClick={startNewChat}
+          onClick={() => {
+            setActivePage("chat");
+            startNewChat();
+          }}
           disabled={loading}
         >
           + New chat
         </button>
 
-        <div className="conversations">
+        {activePage === "chat" && (
+          <div className="conversations">
 
-          <p className="sidebar-label">
-            Conversations
-          </p>
+            <p className="sidebar-label">
+              Conversations
+            </p>
 
-          {loadingConversations ? (
-            <p className="empty-conversations">
-              Loading...
-            </p>
-          ) : conversations.length === 0 ? (
-            <p className="empty-conversations">
-              No conversations yet
-            </p>
-          ) : (
-            conversations.map((conversation) => (
-              <button
-                key={conversation.conversation_id}
-                className={`conversation-item ${
-                  conversationId ===
-                  conversation.conversation_id
-                    ? "active"
-                    : ""
-                }`}
-                onClick={() =>
-                  loadConversation(
+            {loadingConversations ? (
+              <p className="empty-conversations">
+                Loading...
+              </p>
+            ) : conversations.length === 0 ? (
+              <p className="empty-conversations">
+                No conversations yet
+              </p>
+            ) : (
+              conversations.map((conversation) => (
+                <button
+                  key={conversation.conversation_id}
+                  className={`conversation-item ${
+                    conversationId ===
                     conversation.conversation_id
-                  )
-                }
-                disabled={loading}
-              >
-                <span>
-                  {conversation.title ||
-                    "New conversation"}
-                </span>
+                      ? "active"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    loadConversation(
+                      conversation.conversation_id
+                    )
+                  }
+                  disabled={loading}
+                >
+                  <span>
+                    {conversation.title ||
+                      "New conversation"}
+                  </span>
 
-                <small>
-                  {formatDate(
-                    conversation.updated_at
-                  )}
-                </small>
-              </button>
-            ))
-          )}
+                  <small>
+                    {formatDate(
+                      conversation.updated_at
+                    )}
+                  </small>
+                </button>
+              ))
+            )}
 
-        </div>
+          </div>
+        )}
 
       </aside>
 
       {/* =================================================
-          CHAT
+          MAIN CONTENT
           ================================================= */}
 
       <main className="chat">
 
-        {/* Header */}
+        {/* =================================================
+            DASHBOARD
+            ================================================= */}
 
-        <header className="chat-header">
+        {activePage === "dashboard" && (
+          <div className="page">
 
-          <div>
-            <h1>OpsAI</h1>
+            <header className="chat-header">
+              <div>
+                <h1>Dashboard</h1>
+                <p>Welcome to OpsAI</p>
+              </div>
+            </header>
 
-            <p>
-              IT Operations Assistant
-            </p>
+            <div className="page-content">
+
+              {/* Ticket summary */}
+
+              <div className="ticket-summary">
+
+                <div className="summary-card">
+                  <span className="summary-label">
+                    Total Tickets
+                  </span>
+
+                  <strong>
+                    {tickets.length}
+                  </strong>
+                </div>
+
+                <div className="summary-card">
+                  <span className="summary-label">
+                    Open
+                  </span>
+
+                  <strong>
+                    {
+                      tickets.filter(
+                        (ticket) =>
+                          ticket.status === "open"
+                      ).length
+                    }
+                  </strong>
+                </div>
+
+                <div className="summary-card">
+                  <span className="summary-label">
+                    Closed
+                  </span>
+
+                  <strong>
+                    {
+                      tickets.filter(
+                        (ticket) =>
+                          ticket.status === "closed"
+                      ).length
+                    }
+                  </strong>
+                </div>
+
+              </div>
+
+              {/* Recent tickets */}
+
+              <div className="recent-tickets">
+
+                <div className="section-header">
+
+                  <h2>
+                    Recent Tickets
+                  </h2>
+
+                  <button
+                    onClick={() =>
+                      setActivePage("tickets")
+                    }
+                  >
+                    View all
+                  </button>
+
+                </div>
+
+                {loadingTickets ? (
+                  <p>Loading tickets...</p>
+                ) : tickets.length === 0 ? (
+                  <p>No tickets yet.</p>
+                ) : (
+                  tickets
+                    .slice(0, 5)
+                    .map((ticket) => (
+                      <div
+                        key={ticket.id}
+                        className="ticket-row"
+                      >
+
+                        <div>
+
+                          <strong>
+                            {ticket.id}
+                          </strong>
+
+                          <p>
+                            {ticket.description}
+                          </p>
+
+                        </div>
+
+                        <div>
+
+                          <span className="ticket-category">
+                            {ticket.category}
+                          </span>
+
+                          <span className="ticket-status">
+                            {ticket.status}
+                          </span>
+
+                        </div>
+
+                      </div>
+                    ))
+                )}
+
+              </div>
+
+            </div>
+
           </div>
+        )}
 
-        </header>
+        {/* =================================================
+            MY TICKETS
+            ================================================= */}
 
-        {/* Messages */}
+        {activePage === "tickets" && (
+          <div className="page">
 
-        <div className="messages">
+            <header className="chat-header">
 
-          {messages.length === 0 ? (
+              <div>
 
-            <div className="welcome">
+                <h1>
+                  My Tickets
+                </h1>
 
-              <h2>
-                How can I help?
-              </h2>
+                <p>
+                  View your support tickets
+                </p>
 
-              <p>
-                Ask about incidents, tickets,
-                users, permissions, or IT
-                troubleshooting.
+              </div>
+
+            </header>
+
+            <div className="page-content">
+
+              {loadingTickets ? (
+
+                <p>
+                  Loading tickets...
+                </p>
+
+              ) : tickets.length === 0 ? (
+
+                <div className="empty-tickets">
+
+                  <h2>
+                    No tickets yet
+                  </h2>
+
+                  <p>
+                    Tickets you create through OpsAI
+                    will appear here.
+                  </p>
+
+                </div>
+
+              ) : selectedTicket ? (
+
+                /* =================================================
+                   TICKET DETAILS
+                   ================================================= */
+
+                <div className="ticket-details">
+
+                  <button
+                    className="back-button"
+                    onClick={() =>
+                      setSelectedTicket(null)
+                    }
+                  >
+                    ← Back to My Tickets
+                  </button>
+
+                  <div className="ticket-details-card">
+
+                    {/* Ticket header */}
+
+                    <div className="ticket-details-header">
+
+                      <div>
+
+                        <span className="ticket-details-id">
+                          {selectedTicket.id}
+                        </span>
+
+                        <h2>
+                          {selectedTicket.category} issue
+                        </h2>
+
+                      </div>
+
+                      <span className="ticket-status">
+                        {selectedTicket.status}
+                      </span>
+
+                    </div>
+
+                    {/* Ticket information */}
+
+                    <div className="ticket-details-section">
+
+                      <h3>
+                        Ticket information
+                      </h3>
+
+                      <div className="ticket-info-grid">
+
+                        <div>
+
+                          <span className="ticket-info-label">
+                            Ticket ID
+                          </span>
+
+                          <strong>
+                            {selectedTicket.id}
+                          </strong>
+
+                        </div>
+
+                        <div>
+
+                          <span className="ticket-info-label">
+                            Category
+                          </span>
+
+                          <strong>
+                            {selectedTicket.category}
+                          </strong>
+
+                        </div>
+
+                        <div>
+
+                          <span className="ticket-info-label">
+                            Status
+                          </span>
+
+                          <strong>
+                            {selectedTicket.status}
+                          </strong>
+
+                        </div>
+
+                        <div>
+
+                          <span className="ticket-info-label">
+                            Created
+                          </span>
+
+                          <strong>
+                            {formatDate(
+                              selectedTicket.created_at
+                            )}
+                          </strong>
+
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                    {/* Description */}
+
+                    <div className="ticket-details-section">
+
+                      <h3>
+                        Description
+                      </h3>
+
+                      <p className="ticket-full-description">
+                        {selectedTicket.description}
+                      </p>
+
+                    </div>
+
+                    {/* Assignment */}
+
+                    <div className="ticket-details-section">
+
+                      <h3>
+                        Assignment
+                      </h3>
+
+                      <div className="assigned-person">
+
+                        <div className="assigned-avatar">
+                          AS
+                        </div>
+
+                        <div>
+
+                          <strong>
+                            Alex Smith
+                          </strong>
+
+                          <span>
+                            IT Support Specialist
+                          </span>
+
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                    {/* Activity */}
+
+                    <div className="ticket-details-section">
+
+                      <h3>
+                        Activity
+                      </h3>
+
+                      <div className="ticket-activity">
+
+                        <div className="activity-item">
+
+                          <div className="activity-dot"></div>
+
+                          <div>
+
+                            <strong>
+                              Ticket created
+                            </strong>
+
+                            <p>
+                              OpsAI created this ticket
+                              on behalf of the user.
+                            </p>
+
+                            <small>
+                              {formatDate(
+                                selectedTicket.created_at
+                              )}
+                            </small>
+
+                          </div>
+
+                        </div>
+
+                        <div className="activity-item">
+
+                          <div className="activity-dot"></div>
+
+                          <div>
+
+                            <strong>
+                              Assigned to IT Support
+                            </strong>
+
+                            <p>
+                              Alex Smith has been assigned
+                              to investigate the issue.
+                            </p>
+
+                            <small>
+                              {formatDate(
+                                selectedTicket.created_at
+                              )}
+                            </small>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              ) : (
+
+                /* =================================================
+                   TICKET LIST
+                   ================================================= */
+
+                <div className="tickets-list">
+
+                  {tickets.map((ticket) => (
+
+                    <div
+                      key={ticket.id}
+                      className="ticket-card"
+                      onClick={() =>
+                        setSelectedTicket(ticket)
+                      }
+                    >
+
+                      <div className="ticket-card-header">
+
+                        <div>
+
+                          <strong>
+                            {ticket.id}
+                          </strong>
+
+                          <span className="ticket-category">
+                            {ticket.category}
+                          </span>
+
+                        </div>
+
+                        <span className="ticket-status">
+                          {ticket.status}
+                        </span>
+
+                      </div>
+
+                      <p className="ticket-description">
+                        {ticket.description}
+                      </p>
+
+                      <div className="ticket-meta">
+                        Created{" "}
+                        {formatDate(
+                          ticket.created_at
+                        )}
+                      </div>
+
+                    </div>
+
+                  ))}
+
+                </div>
+
+              )}
+
+            </div>
+
+          </div>
+        )}
+
+        {/* =================================================
+            CHAT
+            ================================================= */}
+
+        {activePage === "chat" && (
+          <>
+
+            {/* Header */}
+
+            <header className="chat-header">
+
+              <div>
+
+                <h1>
+                  OpsAI
+                </h1>
+
+                <p>
+                  IT Operations Assistant
+                </p>
+
+              </div>
+
+            </header>
+
+            {/* Messages */}
+
+            <div className="messages">
+
+              {messages.length === 0 ? (
+
+                <div className="welcome">
+
+                  <h2>
+                    How can I help?
+                  </h2>
+
+                  <p>
+                    Ask about incidents, tickets,
+                    users, permissions, or IT
+                    troubleshooting.
+                  </p>
+
+                </div>
+
+              ) : (
+
+                messages.map((item, index) => (
+
+                  <div
+                    key={index}
+                    className={`message ${item.role}`}
+                  >
+
+                    <div className="message-wrapper">
+
+                      {item.role === "assistant" && (
+                        <div className="message-role">
+                          OpsAI
+                        </div>
+                      )}
+
+                      <div className="message-content">
+
+                        {item.role === "assistant" ? (
+
+                          <ReactMarkdown
+                            remarkPlugins={[
+                              remarkGfm,
+                            ]}
+                          >
+                            {item.content}
+                          </ReactMarkdown>
+
+                        ) : (
+
+                          item.content
+
+                        )}
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                ))
+
+              )}
+
+              {/* Typing indicator */}
+
+              {loading && (
+
+                <div className="message assistant">
+
+                  <div className="message-wrapper">
+
+                    <div className="message-role">
+                      OpsAI
+                    </div>
+
+                    <div className="message-content typing">
+
+                      <span></span>
+                      <span></span>
+                      <span></span>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+              )}
+
+              <div ref={messagesEndRef} />
+
+            </div>
+
+            {/* Input */}
+
+            <div className="input-area">
+
+              <div className="input-container">
+
+                <textarea
+                  rows="1"
+                  placeholder="Ask OpsAI..."
+                  value={message}
+                  onChange={(event) =>
+                    setMessage(
+                      event.target.value
+                    )
+                  }
+                  onKeyDown={handleKeyDown}
+                  disabled={loading}
+                />
+
+                <button
+                  onClick={sendMessage}
+                  disabled={
+                    loading ||
+                    !message.trim()
+                  }
+                >
+                  {loading ? "..." : "Send"}
+                </button>
+
+              </div>
+
+              <p className="input-hint">
+                Enter to send · Shift + Enter
+                for a new line
               </p>
 
             </div>
 
-          ) : (
-
-            messages.map((item, index) => (
-
-              <div
-                key={index}
-                className={`message ${item.role}`}
-              >
-
-                <div className="message-wrapper">
-
-                  {/* Assistant label */}
-
-                  {item.role === "assistant" && (
-                    <div className="message-role">
-                      OpsAI
-                    </div>
-                  )}
-
-                  {/* Message */}
-
-                  <div className="message-content">
-                    {item.role === "assistant" ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {item.content}
-                      </ReactMarkdown>
-                    ) : (
-                      item.content
-                    )}
-                  </div>
-
-                
-
-                </div>
-
-              </div>
-
-            ))
-
-          )}
-
-          {/* Typing indicator */}
-
-          {loading && (
-
-            <div className="message assistant">
-
-              <div className="message-wrapper">
-
-                <div className="message-role">
-                  OpsAI
-                </div>
-
-                <div className="message-content typing">
-
-                  <span></span>
-                  <span></span>
-                  <span></span>
-
-                </div>
-
-              </div>
-
-            </div>
-
-          )}
-
-          <div ref={messagesEndRef} />
-
-        </div>
-
-        {/* =================================================
-            INPUT
-            ================================================= */}
-
-        <div className="input-area">
-
-          <div className="input-container">
-
-            <textarea
-              rows="1"
-              placeholder="Ask OpsAI..."
-              value={message}
-              onChange={(event) =>
-                setMessage(event.target.value)
-              }
-              onKeyDown={handleKeyDown}
-              disabled={loading}
-            />
-
-            <button
-              onClick={sendMessage}
-              disabled={
-                loading || !message.trim()
-              }
-            >
-              {loading ? "..." : "Send"}
-            </button>
-
-          </div>
-
-          <p className="input-hint">
-            Enter to send · Shift + Enter for a new line
-          </p>
-
-        </div>
+          </>
+        )}
 
       </main>
 
