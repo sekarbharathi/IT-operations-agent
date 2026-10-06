@@ -18,6 +18,7 @@ def ticket_to_dict(ticket: Ticket):
     return {
         "id": ticket.id,
         "user_id": ticket.user_id,
+        "assigned_to": ticket.assigned_to,
         "category": ticket.category,
         "description": ticket.description,
         "status": ticket.status,
@@ -60,6 +61,7 @@ def create_ticket(
     new_ticket = Ticket(
         id=ticket_id,
         user_id=ticket.user_id,
+        assigned_to="user_006",
         category=ticket.category,
         description=ticket.description,
         status="open"

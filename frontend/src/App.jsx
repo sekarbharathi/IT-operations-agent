@@ -8,12 +8,45 @@ function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [conversations, setConversations] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  /*
+   * tickets = current user's own tickets
+   * dashboardTickets = role-based tickets
+   *   - employee -> own tickets
+   *   - manager  -> team tickets
+   *   - admin    -> all tickets
+   */
   const [tickets, setTickets] = useState([]);
+  const [dashboardTickets, setDashboardTickets] = useState([]);
+
   const [activePage, setActivePage] = useState("dashboard");
+
+  /*
+   * Controls which ticket collection the ticket page displays.
+   *
+   * my   -> current user's tickets
+   * team -> manager's team tickets
+   * all  -> admin's all tickets
+   */
+  const [ticketScope, setTicketScope] = useState("my");
+
   const [loadingTickets, setLoadingTickets] = useState(true);
   const [selectedTicket, setSelectedTicket] = useState(null);
 
-  // Restore the last active conversation after refresh
+  /*
+   * User assigned to the selected ticket.
+   */
+  const [assignedUser, setAssignedUser] = useState(null);
+
+  /*
+   * User who created/requested the selected ticket.
+   */
+  const [ticketUser, setTicketUser] = useState(null);
+
+  /*
+   * Restore the last active conversation after refresh.
+   */
   const [conversationId, setConversationId] = useState(() =>
     localStorage.getItem("opsai_conversation_id")
   );
@@ -25,14 +58,24 @@ function App() {
   const messagesEndRef = useRef(null);
 
   /*
-   * Load conversations and tickets when the application starts.
+   * The tickets displayed on the ticket page.
    *
-   * If a conversation was active before refresh,
-   * load that conversation as well.
+   * My Tickets -> tickets
+   * Team Tickets -> dashboardTickets
+   * All Tickets -> dashboardTickets
+   */
+  const visibleTickets =
+    ticketScope === "team" || ticketScope === "all"
+      ? dashboardTickets
+      : tickets;
+
+  /*
+   * Load conversations and tickets when the application starts.
    */
   useEffect(() => {
     loadConversations();
     loadTickets();
+    loadCurrentUser();
 
     const savedConversationId =
       localStorage.getItem("opsai_conversation_id");
@@ -44,9 +87,6 @@ function App() {
 
   /*
    * Keep the active conversation ID in localStorage.
-   *
-   * This is what allows the same conversation to
-   * remain active after a browser refresh.
    */
   useEffect(() => {
     if (conversationId) {
@@ -55,7 +95,9 @@ function App() {
         conversationId
       );
     } else {
-      localStorage.removeItem("opsai_conversation_id");
+      localStorage.removeItem(
+        "opsai_conversation_id"
+      );
     }
   }, [conversationId]);
 
@@ -128,10 +170,6 @@ function App() {
         error
       );
 
-      /*
-       * If the saved conversation no longer exists
-       * in the backend, clear the invalid ID.
-       */
       localStorage.removeItem(
         "opsai_conversation_id"
       );
@@ -190,10 +228,7 @@ function App() {
       }
 
       /*
-       * The backend gives us the conversation ID.
-       *
-       * This will also be saved to localStorage by
-       * the conversationId useEffect above.
+       * Save conversation ID.
        */
       setConversationId(data.conversation_id);
 
@@ -210,8 +245,7 @@ function App() {
       ]);
 
       /*
-       * Refresh the sidebar conversation list
-       * and the user's tickets.
+       * Refresh sidebar conversations and tickets.
        */
       await loadConversations();
       await loadTickets();
@@ -231,19 +265,220 @@ function App() {
   }
 
   /*
-   * Load tickets belonging to the current user.
+   * Load current user.
    */
-  async function loadTickets() {
+  async function loadCurrentUser() {
     try {
       const response = await fetch(
-        `${API_URL}/api/tickets?user_id=user_002`
+        `${API_URL}/api/users/user_001`
       );
 
       const data = await response.json();
 
-      if (data.success) {
-        setTickets(data.tickets);
+      if (response.ok) {
+        setCurrentUser(data);
       }
+    } catch (error) {
+      console.error(
+        "Failed to load current user:",
+        error
+      );
+    }
+  }
+
+  /*
+   * Load the user assigned to a ticket.
+   */
+  async function loadAssignedUser(userId) {
+    if (!userId) {
+      setAssignedUser(null);
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/users/${userId}`
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setAssignedUser(data);
+      } else {
+        setAssignedUser(null);
+      }
+    } catch (error) {
+      console.error(
+        "Failed to load assigned user:",
+        error
+      );
+
+      setAssignedUser(null);
+    }
+  }
+
+  /*
+   * Load the user who created/requested a ticket.
+   */
+  async function loadTicketUser(userId) {
+    if (!userId) {
+      return null;
+    }
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/users/${userId}`
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        return data;
+      }
+    } catch (error) {
+      console.error(
+        "Failed to load ticket user:",
+        error
+      );
+    }
+
+    return null;
+  }
+
+  /*
+   * Open a ticket and load all related user information.
+   *
+   * scope:
+   *   my
+   *   team
+   *   all
+   */
+  async function openTicket(ticket, scope) {
+    setTicketScope(scope);
+    setSelectedTicket(ticket);
+
+    /*
+     * Clear old ticket information first.
+     * This prevents the previous ticket's user/assignment
+     * from appearing briefly.
+     */
+    setAssignedUser(null);
+    setTicketUser(null);
+
+    /*
+     * Load assigned user.
+     */
+    await loadAssignedUser(ticket.assigned_to);
+
+    /*
+     * Load ticket requester.
+     */
+    const user = await loadTicketUser(ticket.user_id);
+
+    setTicketUser(user);
+
+    /*
+     * Open ticket page.
+     */
+    setActivePage("tickets");
+  }
+
+  /*
+   * Load tickets belonging to the current user
+   * and role-based dashboard tickets.
+   */
+  async function loadTickets() {
+    try {
+      const userId = "user_001";
+
+      /*
+       * Load current user.
+       */
+      const userResponse = await fetch(
+        `${API_URL}/api/users/${userId}`
+      );
+
+      const user = await userResponse.json();
+
+      /*
+       * Load current user's own tickets.
+       */
+      const ticketsResponse = await fetch(
+        `${API_URL}/api/tickets?user_id=${userId}`
+      );
+
+      const ticketsData = await ticketsResponse.json();
+
+      if (!ticketsData.success) {
+        throw new Error(
+          "Failed to load tickets"
+        );
+      }
+
+      /*
+       * Always keep the user's own tickets
+       * separately.
+       */
+      setTickets(ticketsData.tickets);
+
+      /*
+       * Employee:
+       * dashboard shows only their tickets.
+       */
+      if (user.role === "employee") {
+        setDashboardTickets(
+          ticketsData.tickets
+        );
+        return;
+      }
+
+      /*
+       * Manager:
+       * dashboard shows team tickets.
+       */
+      if (user.role === "manager") {
+        const teamResponse = await fetch(
+          `${API_URL}/api/tickets/team?requester_id=${userId}`
+        );
+
+        const teamData =
+          await teamResponse.json();
+
+        if (!teamData.success) {
+          throw new Error(
+            "Failed to load team tickets"
+          );
+        }
+
+        setDashboardTickets(
+          teamData.tickets
+        );
+        return;
+      }
+
+      /*
+       * Admin:
+       * dashboard shows all tickets.
+       */
+      if (user.role === "admin") {
+        const allResponse = await fetch(
+          `${API_URL}/api/tickets/all?requester_id=${userId}`
+        );
+
+        const allData =
+          await allResponse.json();
+
+        if (!allData.success) {
+          throw new Error(
+            "Failed to load all tickets"
+          );
+        }
+
+        setDashboardTickets(
+          allData.tickets
+        );
+      }
+
     } catch (error) {
       console.error(
         "Failed to load tickets:",
@@ -259,7 +494,10 @@ function App() {
    * Shift + Enter creates a new line.
    */
   function handleKeyDown(event) {
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey
+    ) {
       event.preventDefault();
       sendMessage();
     }
@@ -273,9 +511,6 @@ function App() {
     setConversationId(null);
     setMessage("");
 
-    /*
-     * Explicitly remove the saved conversation.
-     */
     localStorage.removeItem(
       "opsai_conversation_id"
     );
@@ -289,14 +524,13 @@ function App() {
       return "";
     }
 
-    return new Date(dateString).toLocaleDateString(
-      "en-FI",
-      {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }
-    );
+    return new Date(
+      dateString
+    ).toLocaleDateString("en-FI", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   }
 
   /*
@@ -307,13 +541,12 @@ function App() {
       return "";
     }
 
-    return new Date(dateString).toLocaleTimeString(
-      "en-FI",
-      {
-        hour: "2-digit",
-        minute: "2-digit",
-      }
-    );
+    return new Date(
+      dateString
+    ).toLocaleTimeString("en-FI", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   return (
@@ -331,35 +564,41 @@ function App() {
 
         <button
           className={`sidebar-nav ${
-            activePage === "dashboard" ? "active" : ""
+            activePage === "dashboard"
+              ? "active"
+              : ""
           }`}
-          onClick={() => setActivePage("dashboard")}
+          onClick={() => {
+            setSelectedTicket(null);
+            setActivePage("dashboard");
+          }}
         >
           Dashboard
         </button>
 
         <button
           className={`sidebar-nav ${
-            activePage === "tickets" ? "active" : ""
+            activePage === "chat"
+              ? "active"
+              : ""
           }`}
-          onClick={() => setActivePage("tickets")}
+          onClick={() =>
+            setActivePage("chat")
+          }
         >
-          My Tickets
-        </button>
-
-        <button
-          className="new-chat"
-          onClick={() => {
-            setActivePage("chat");
-            startNewChat();
-          }}
-          disabled={loading}
-        >
-          + New chat
+          Chat
         </button>
 
         {activePage === "chat" && (
           <div className="conversations">
+
+            <button
+              className="new-chat"
+              onClick={startNewChat}
+              disabled={loading}
+            >
+              + New chat
+            </button>
 
             <p className="sidebar-label">
               Conversations
@@ -374,34 +613,38 @@ function App() {
                 No conversations yet
               </p>
             ) : (
-              conversations.map((conversation) => (
-                <button
-                  key={conversation.conversation_id}
-                  className={`conversation-item ${
-                    conversationId ===
-                    conversation.conversation_id
-                      ? "active"
-                      : ""
-                  }`}
-                  onClick={() =>
-                    loadConversation(
+              conversations.map(
+                (conversation) => (
+                  <button
+                    key={
                       conversation.conversation_id
-                    )
-                  }
-                  disabled={loading}
-                >
-                  <span>
-                    {conversation.title ||
-                      "New conversation"}
-                  </span>
+                    }
+                    className={`conversation-item ${
+                      conversationId ===
+                      conversation.conversation_id
+                        ? "active"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      loadConversation(
+                        conversation.conversation_id
+                      )
+                    }
+                    disabled={loading}
+                  >
+                    <span>
+                      {conversation.title ||
+                        "New conversation"}
+                    </span>
 
-                  <small>
-                    {formatDate(
-                      conversation.updated_at
-                    )}
-                  </small>
-                </button>
-              ))
+                    <small>
+                      {formatDate(
+                        conversation.updated_at
+                      )}
+                    </small>
+                  </button>
+                )
+              )
             )}
 
           </div>
@@ -424,121 +667,528 @@ function App() {
 
             <header className="chat-header">
               <div>
-                <h1>Dashboard</h1>
-                <p>Welcome to OpsAI</p>
+                <h1>
+                  Dashboard
+                </h1>
+
+                <p>
+                  Welcome back
+                  {currentUser?.name
+                    ? `, ${currentUser.name}`
+                    : ""}
+                </p>
               </div>
             </header>
 
             <div className="page-content">
 
-              {/* Ticket summary */}
+              {/* =================================================
+                  MANAGER SUMMARY
+                  ================================================= */}
 
-              <div className="ticket-summary">
+              {currentUser?.role ===
+                "manager" && (
+                <div className="ticket-summary">
 
-                <div className="summary-card">
-                  <span className="summary-label">
-                    Total Tickets
-                  </span>
+                  <div className="summary-card">
+                    <span className="summary-label">
+                      My Tickets
+                    </span>
 
-                  <strong>
-                    {tickets.length}
-                  </strong>
-                </div>
+                    <strong>
+                      {tickets.length}
+                    </strong>
+                  </div>
 
-                <div className="summary-card">
-                  <span className="summary-label">
-                    Open
-                  </span>
+                  <div className="summary-card">
+                    <span className="summary-label">
+                      Team Tickets
+                    </span>
 
-                  <strong>
-                    {
-                      tickets.filter(
-                        (ticket) =>
-                          ticket.status === "open"
-                      ).length
-                    }
-                  </strong>
-                </div>
+                    <strong>
+                      {dashboardTickets.length}
+                    </strong>
+                  </div>
 
-                <div className="summary-card">
-                  <span className="summary-label">
-                    Closed
-                  </span>
+                  <div className="summary-card">
+                    <span className="summary-label">
+                      Open Tickets
+                    </span>
 
-                  <strong>
-                    {
-                      tickets.filter(
-                        (ticket) =>
-                          ticket.status === "closed"
-                      ).length
-                    }
-                  </strong>
-                </div>
+                    <strong>
+                      {
+                        dashboardTickets.filter(
+                          (ticket) =>
+                            ticket.status ===
+                            "open"
+                        ).length
+                      }
+                    </strong>
+                  </div>
 
-              </div>
+                  <div className="summary-card">
+                    <span className="summary-label">
+                      Closed Tickets
+                    </span>
 
-              {/* Recent tickets */}
-
-              <div className="recent-tickets">
-
-                <div className="section-header">
-
-                  <h2>
-                    Recent Tickets
-                  </h2>
-
-                  <button
-                    onClick={() =>
-                      setActivePage("tickets")
-                    }
-                  >
-                    View all
-                  </button>
+                    <strong>
+                      {
+                        dashboardTickets.filter(
+                          (ticket) =>
+                            ticket.status ===
+                            "closed"
+                        ).length
+                      }
+                    </strong>
+                  </div>
 
                 </div>
+              )}
 
-                {loadingTickets ? (
-                  <p>Loading tickets...</p>
-                ) : tickets.length === 0 ? (
-                  <p>No tickets yet.</p>
-                ) : (
-                  tickets
-                    .slice(0, 5)
-                    .map((ticket) => (
-                      <div
-                        key={ticket.id}
-                        className="ticket-row"
+              {/* =================================================
+                  EMPLOYEE SUMMARY
+                  ================================================= */}
+
+              {currentUser?.role ===
+                "employee" && (
+                <div className="ticket-summary">
+
+                  <div className="summary-card">
+                    <span className="summary-label">
+                      My Tickets
+                    </span>
+
+                    <strong>
+                      {tickets.length}
+                    </strong>
+                  </div>
+
+                  <div className="summary-card">
+                    <span className="summary-label">
+                      Open Tickets
+                    </span>
+
+                    <strong>
+                      {
+                        tickets.filter(
+                          (ticket) =>
+                            ticket.status ===
+                            "open"
+                        ).length
+                      }
+                    </strong>
+                  </div>
+
+                  <div className="summary-card">
+                    <span className="summary-label">
+                      Closed Tickets
+                    </span>
+
+                    <strong>
+                      {
+                        tickets.filter(
+                          (ticket) =>
+                            ticket.status ===
+                            "closed"
+                        ).length
+                      }
+                    </strong>
+                  </div>
+
+                </div>
+              )}
+
+              {/* =================================================
+                  ADMIN SUMMARY
+                  ================================================= */}
+
+              {currentUser?.role ===
+                "admin" && (
+                <div className="ticket-summary">
+
+                  <div className="summary-card">
+                    <span className="summary-label">
+                      All Tickets
+                    </span>
+
+                    <strong>
+                      {dashboardTickets.length}
+                    </strong>
+                  </div>
+
+                  <div className="summary-card">
+                    <span className="summary-label">
+                      Open Tickets
+                    </span>
+
+                    <strong>
+                      {
+                        dashboardTickets.filter(
+                          (ticket) =>
+                            ticket.status ===
+                            "open"
+                        ).length
+                      }
+                    </strong>
+                  </div>
+
+                  <div className="summary-card">
+                    <span className="summary-label">
+                      Closed Tickets
+                    </span>
+
+                    <strong>
+                      {
+                        dashboardTickets.filter(
+                          (ticket) =>
+                            ticket.status ===
+                            "closed"
+                        ).length
+                      }
+                    </strong>
+                  </div>
+
+                </div>
+              )}
+
+              {/* =================================================
+                  MANAGER TICKETS
+                  ================================================= */}
+
+              {currentUser?.role ===
+                "manager" && (
+                <>
+                  {/* My Tickets */}
+
+                  <div className="recent-tickets">
+
+                    <div className="section-header">
+
+                      <h2>
+                        My Tickets
+                      </h2>
+
+                      <button
+                        onClick={() => {
+                          setTicketScope("my");
+                          setSelectedTicket(null);
+                          setActivePage("tickets");
+                        }}
                       >
+                        View all
+                      </button>
 
-                        <div>
+                    </div>
 
-                          <strong>
-                            {ticket.id}
-                          </strong>
+                    {tickets.length ===
+                    0 ? (
+                      <p className="empty-tickets">
+                        No tickets yet.
+                      </p>
+                    ) : (
+                      tickets
+                        .slice(0, 5)
+                        .map((ticket) => (
+                          <div
+                            key={ticket.id}
+                            className="ticket-row"
+                            onClick={() =>
+                              openTicket(
+                                ticket,
+                                "my"
+                              )
+                            }
+                          >
 
-                          <p>
-                            {ticket.description}
-                          </p>
+                            <div>
+
+                              <strong>
+                                {ticket.id}
+                              </strong>
+
+                              <p>
+                                {
+                                  ticket.description
+                                }
+                              </p>
+
+                            </div>
+
+                            <div>
+
+                              <span className="ticket-category">
+                                {
+                                  ticket.category
+                                }
+                              </span>
+
+                              <span className="ticket-status">
+                                {
+                                  ticket.status
+                                }
+                              </span>
+
+                            </div>
+
+                          </div>
+                        ))
+                    )}
+
+                  </div>
+
+                  {/* Team Tickets */}
+
+                  <div className="recent-tickets">
+
+                    <div className="section-header">
+
+                      <h2>
+                        Team Tickets
+                      </h2>
+
+                      <button
+                        onClick={() => {
+                          setTicketScope(
+                            "team"
+                          );
+                          setSelectedTicket(null);
+                          setActivePage(
+                            "tickets"
+                          );
+                        }}
+                      >
+                        View all
+                      </button>
+
+                    </div>
+
+                    {dashboardTickets.length ===
+                    0 ? (
+                      <p className="empty-tickets">
+                        No team tickets yet.
+                      </p>
+                    ) : (
+                      dashboardTickets
+                        .slice(0, 5)
+                        .map((ticket) => (
+                          <div
+                            key={ticket.id}
+                            className="ticket-row"
+                            onClick={() =>
+                              openTicket(
+                                ticket,
+                                "team"
+                              )
+                            }
+                          >
+
+                            <div>
+
+                              <strong>
+                                {ticket.id}
+                              </strong>
+
+                              <p>
+                                {
+                                  ticket.description
+                                }
+                              </p>
+
+                            </div>
+
+                            <div>
+
+                              <span className="ticket-category">
+                                {
+                                  ticket.category
+                                }
+                              </span>
+
+                              <span className="ticket-status">
+                                {
+                                  ticket.status
+                                }
+                              </span>
+
+                            </div>
+
+                          </div>
+                        ))
+                    )}
+
+                  </div>
+                </>
+              )}
+
+              {/* =================================================
+                  EMPLOYEE TICKETS
+                  ================================================= */}
+
+              {currentUser?.role ===
+                "employee" && (
+                <div className="recent-tickets">
+
+                  <div className="section-header">
+
+                    <h2>
+                      My Tickets
+                    </h2>
+
+                    <button
+                      onClick={() => {
+                        setTicketScope("my");
+                        setSelectedTicket(null);
+                        setActivePage(
+                          "tickets"
+                        );
+                      }}
+                    >
+                      View all
+                    </button>
+
+                  </div>
+
+                  {tickets.length ===
+                  0 ? (
+                    <p className="empty-tickets">
+                      No tickets yet.
+                    </p>
+                  ) : (
+                    tickets
+                      .slice(0, 5)
+                      .map((ticket) => (
+                        <div
+                          key={ticket.id}
+                          className="ticket-row"
+                          onClick={() =>
+                            openTicket(
+                              ticket,
+                              "my"
+                            )
+                          }
+                        >
+
+                          <div>
+
+                            <strong>
+                              {ticket.id}
+                            </strong>
+
+                            <p>
+                              {
+                                ticket.description
+                              }
+                            </p>
+
+                          </div>
+
+                          <div>
+
+                            <span className="ticket-category">
+                              {
+                                ticket.category
+                              }
+                            </span>
+
+                            <span className="ticket-status">
+                              {
+                                ticket.status
+                              }
+                            </span>
+
+                          </div>
 
                         </div>
+                      ))
+                  )}
 
-                        <div>
+                </div>
+              )}
 
-                          <span className="ticket-category">
-                            {ticket.category}
-                          </span>
+              {/* =================================================
+                  ADMIN TICKETS
+                  ================================================= */}
 
-                          <span className="ticket-status">
-                            {ticket.status}
-                          </span>
+              {currentUser?.role ===
+                "admin" && (
+                <div className="recent-tickets">
+
+                  <div className="section-header">
+
+                    <h2>
+                      All Tickets
+                    </h2>
+
+                    <button
+                      onClick={() => {
+                        setTicketScope("all");
+                        setSelectedTicket(null);
+                        setActivePage(
+                          "tickets"
+                        );
+                      }}
+                    >
+                      View all
+                    </button>
+
+                  </div>
+
+                  {dashboardTickets.length ===
+                  0 ? (
+                    <p className="empty-tickets">
+                      No tickets yet.
+                    </p>
+                  ) : (
+                    dashboardTickets
+                      .slice(0, 5)
+                      .map((ticket) => (
+                        <div
+                          key={ticket.id}
+                          className="ticket-row"
+                          onClick={() =>
+                            openTicket(
+                              ticket,
+                              "all"
+                            )
+                          }
+                        >
+
+                          <div>
+
+                            <strong>
+                              {ticket.id}
+                            </strong>
+
+                            <p>
+                              {
+                                ticket.description
+                              }
+                            </p>
+
+                          </div>
+
+                          <div>
+
+                            <span className="ticket-category">
+                              {
+                                ticket.category
+                              }
+                            </span>
+
+                            <span className="ticket-status">
+                              {
+                                ticket.status
+                              }
+                            </span>
+
+                          </div>
 
                         </div>
+                      ))
+                  )}
 
-                      </div>
-                    ))
-                )}
-
-              </div>
+                </div>
+              )}
 
             </div>
 
@@ -546,7 +1196,7 @@ function App() {
         )}
 
         {/* =================================================
-            MY TICKETS
+            TICKETS PAGE
             ================================================= */}
 
         {activePage === "tickets" && (
@@ -557,11 +1207,19 @@ function App() {
               <div>
 
                 <h1>
-                  My Tickets
+                  {ticketScope === "team"
+                    ? "Team Tickets"
+                    : ticketScope === "all"
+                      ? "All Tickets"
+                      : "My Tickets"}
                 </h1>
 
                 <p>
-                  View your support tickets
+                  {ticketScope === "team"
+                    ? "View tickets from your team"
+                    : ticketScope === "all"
+                      ? "View all support tickets"
+                      : "View your support tickets"}
                 </p>
 
               </div>
@@ -576,17 +1234,25 @@ function App() {
                   Loading tickets...
                 </p>
 
-              ) : tickets.length === 0 ? (
+              ) : visibleTickets.length ===
+                0 ? (
 
                 <div className="empty-tickets">
 
                   <h2>
-                    No tickets yet
+                    {ticketScope === "team"
+                      ? "No team tickets yet"
+                      : ticketScope === "all"
+                        ? "No tickets yet"
+                        : "No tickets yet"}
                   </h2>
 
                   <p>
-                    Tickets you create through OpsAI
-                    will appear here.
+                    {ticketScope === "team"
+                      ? "Tickets from your team will appear here."
+                      : ticketScope === "all"
+                        ? "All support tickets will appear here."
+                        : "Tickets you create through OpsAI will appear here."}
                   </p>
 
                 </div>
@@ -601,11 +1267,18 @@ function App() {
 
                   <button
                     className="back-button"
-                    onClick={() =>
-                      setSelectedTicket(null)
-                    }
+                    onClick={() => {
+                      setSelectedTicket(null);
+                      setAssignedUser(null);
+                      setTicketUser(null);
+                    }}
                   >
-                    ← Back to My Tickets
+                    ← Back to{" "}
+                    {ticketScope === "team"
+                      ? "Team Tickets"
+                      : ticketScope === "all"
+                        ? "All Tickets"
+                        : "My Tickets"}
                   </button>
 
                   <div className="ticket-details-card">
@@ -621,13 +1294,18 @@ function App() {
                         </span>
 
                         <h2>
-                          {selectedTicket.category} issue
+                          {
+                            selectedTicket.category
+                          }{" "}
+                          issue
                         </h2>
 
                       </div>
 
                       <span className="ticket-status">
-                        {selectedTicket.status}
+                        {
+                          selectedTicket.status
+                        }
                       </span>
 
                     </div>
@@ -649,7 +1327,22 @@ function App() {
                           </span>
 
                           <strong>
-                            {selectedTicket.id}
+                            {
+                              selectedTicket.id
+                            }
+                          </strong>
+
+                        </div>
+
+                        <div>
+
+                          <span className="ticket-info-label">
+                            Requested by
+                          </span>
+
+                          <strong>
+                            {ticketUser?.name ||
+                              selectedTicket.user_id}
                           </strong>
 
                         </div>
@@ -661,7 +1354,9 @@ function App() {
                           </span>
 
                           <strong>
-                            {selectedTicket.category}
+                            {
+                              selectedTicket.category
+                            }
                           </strong>
 
                         </div>
@@ -673,7 +1368,9 @@ function App() {
                           </span>
 
                           <strong>
-                            {selectedTicket.status}
+                            {
+                              selectedTicket.status
+                            }
                           </strong>
 
                         </div>
@@ -705,7 +1402,9 @@ function App() {
                       </h3>
 
                       <p className="ticket-full-description">
-                        {selectedTicket.description}
+                        {
+                          selectedTicket.description
+                        }
                       </p>
 
                     </div>
@@ -721,17 +1420,31 @@ function App() {
                       <div className="assigned-person">
 
                         <div className="assigned-avatar">
-                          AS
+
+                          {assignedUser?.name
+                            ? assignedUser.name
+                                .split(" ")
+                                .map(
+                                  (part) =>
+                                    part[0]
+                                )
+                                .join("")
+                                .slice(0, 2)
+                                .toUpperCase()
+                            : "—"}
+
                         </div>
 
                         <div>
 
                           <strong>
-                            Alex Smith
+                            {assignedUser?.name ||
+                              "Not assigned"}
                           </strong>
 
                           <span>
-                            IT Support Specialist
+                            {assignedUser?.team ||
+                              "No team assigned"}
                           </span>
 
                         </div>
@@ -761,8 +1474,9 @@ function App() {
                             </strong>
 
                             <p>
-                              OpsAI created this ticket
-                              on behalf of the user.
+                              OpsAI created this
+                              ticket on behalf
+                              of the user.
                             </p>
 
                             <small>
@@ -775,30 +1489,34 @@ function App() {
 
                         </div>
 
-                        <div className="activity-item">
+                        {selectedTicket.assigned_to && (
+                          <div className="activity-item">
 
-                          <div className="activity-dot"></div>
+                            <div className="activity-dot"></div>
 
-                          <div>
+                            <div>
 
-                            <strong>
-                              Assigned to IT Support
-                            </strong>
+                              <strong>
+                                Ticket assigned
+                              </strong>
 
-                            <p>
-                              Alex Smith has been assigned
-                              to investigate the issue.
-                            </p>
+                              <p>
+                                The ticket is
+                                assigned to{" "}
+                                {assignedUser?.name ||
+                                  "an IT team member"}.
+                              </p>
 
-                            <small>
-                              {formatDate(
-                                selectedTicket.created_at
-                              )}
-                            </small>
+                              <small>
+                                {formatDate(
+                                  selectedTicket.created_at
+                                )}
+                              </small>
+
+                            </div>
 
                           </div>
-
-                        </div>
+                        )}
 
                       </div>
 
@@ -816,50 +1534,59 @@ function App() {
 
                 <div className="tickets-list">
 
-                  {tickets.map((ticket) => (
+                  {visibleTickets.map(
+                    (ticket) => (
+                      <div
+                        key={ticket.id}
+                        className="ticket-card"
+                        onClick={() =>
+                          openTicket(
+                            ticket,
+                            ticketScope
+                          )
+                        }
+                      >
 
-                    <div
-                      key={ticket.id}
-                      className="ticket-card"
-                      onClick={() =>
-                        setSelectedTicket(ticket)
-                      }
-                    >
+                        <div className="ticket-card-header">
 
-                      <div className="ticket-card-header">
+                          <div>
 
-                        <div>
+                            <strong>
+                              {ticket.id}
+                            </strong>
 
-                          <strong>
-                            {ticket.id}
-                          </strong>
+                            <span className="ticket-category">
+                              {
+                                ticket.category
+                              }
+                            </span>
 
-                          <span className="ticket-category">
-                            {ticket.category}
+                          </div>
+
+                          <span className="ticket-status">
+                            {
+                              ticket.status
+                            }
                           </span>
 
                         </div>
 
-                        <span className="ticket-status">
-                          {ticket.status}
-                        </span>
+                        <p className="ticket-description">
+                          {
+                            ticket.description
+                          }
+                        </p>
+
+                        <div className="ticket-meta">
+                          Created{" "}
+                          {formatDate(
+                            ticket.created_at
+                          )}
+                        </div>
 
                       </div>
-
-                      <p className="ticket-description">
-                        {ticket.description}
-                      </p>
-
-                      <div className="ticket-meta">
-                        Created{" "}
-                        {formatDate(
-                          ticket.created_at
-                        )}
-                      </div>
-
-                    </div>
-
-                  ))}
+                    )
+                  )}
 
                 </div>
 
@@ -908,8 +1635,9 @@ function App() {
                   </h2>
 
                   <p>
-                    Ask about incidents, tickets,
-                    users, permissions, or IT
+                    Ask about incidents,
+                    tickets, users,
+                    permissions, or IT
                     troubleshooting.
                   </p>
 
@@ -917,46 +1645,50 @@ function App() {
 
               ) : (
 
-                messages.map((item, index) => (
+                messages.map(
+                  (item, index) => (
 
-                  <div
-                    key={index}
-                    className={`message ${item.role}`}
-                  >
+                    <div
+                      key={index}
+                      className={`message ${item.role}`}
+                    >
 
-                    <div className="message-wrapper">
+                      <div className="message-wrapper">
 
-                      {item.role === "assistant" && (
-                        <div className="message-role">
-                          OpsAI
-                        </div>
-                      )}
-
-                      <div className="message-content">
-
-                        {item.role === "assistant" ? (
-
-                          <ReactMarkdown
-                            remarkPlugins={[
-                              remarkGfm,
-                            ]}
-                          >
-                            {item.content}
-                          </ReactMarkdown>
-
-                        ) : (
-
-                          item.content
-
+                        {item.role ===
+                          "assistant" && (
+                          <div className="message-role">
+                            OpsAI
+                          </div>
                         )}
+
+                        <div className="message-content">
+
+                          {item.role ===
+                          "assistant" ? (
+
+                            <ReactMarkdown
+                              remarkPlugins={[
+                                remarkGfm,
+                              ]}
+                            >
+                              {item.content}
+                            </ReactMarkdown>
+
+                          ) : (
+
+                            item.content
+
+                          )}
+
+                        </div>
 
                       </div>
 
                     </div>
 
-                  </div>
-
-                ))
+                  )
+                )
 
               )}
 
@@ -986,7 +1718,9 @@ function App() {
 
               )}
 
-              <div ref={messagesEndRef} />
+              <div
+                ref={messagesEndRef}
+              />
 
             </div>
 
@@ -1016,14 +1750,16 @@ function App() {
                     !message.trim()
                   }
                 >
-                  {loading ? "..." : "Send"}
+                  {loading
+                    ? "..."
+                    : "Send"}
                 </button>
 
               </div>
 
               <p className="input-hint">
-                Enter to send · Shift + Enter
-                for a new line
+                Enter to send · Shift +
+                Enter for a new line
               </p>
 
             </div>

@@ -9,14 +9,23 @@ class Ticket(Base):
     __tablename__ = "tickets"
 
     id = Column(String, primary_key=True)
+
     user_id = Column(
         String,
         ForeignKey("users.id"),
         nullable=False
     )
+
+    assigned_to = Column(
+        String,
+        ForeignKey("users.id"),
+        nullable=True
+    )
+
     category = Column(String, nullable=False)
     description = Column(String, nullable=False)
     status = Column(String, nullable=False)
+
     created_at = Column(
         DateTime,
         default=datetime.utcnow,

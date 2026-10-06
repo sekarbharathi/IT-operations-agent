@@ -31,7 +31,7 @@ openai_client = OpenAI(
 
 MODEL = "gpt-4o-mini"
 
-CURRENT_USER_ID = "user_002"
+CURRENT_USER_ID = "user_001"
 
 
 SYSTEM_PROMPT  = """
