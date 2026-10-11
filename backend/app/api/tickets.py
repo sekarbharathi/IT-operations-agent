@@ -191,6 +191,7 @@ def get_employee_tickets(
         ]
     }
 
+
 @router.get("/api/tickets/all")
 def get_all_tickets(
     requester_id: str,
@@ -220,8 +221,71 @@ def get_all_tickets(
         .all()
     )
 
+    ticket_list = [
+        ticket_to_dict(ticket)
+        for ticket in tickets
+    ]
+
+    status_counts = {
+        "open": 0,
+        "in_progress": 0,
+        "closed": 0,
+    }
+
+    for ticket in ticket_list:
+        status = (ticket.get("status") or "").lower().strip()
+
+        if status in ("in progress", "in-progress"):
+            status = "in_progress"
+
+        if status in status_counts:
+            status_counts[status] += 1
+
     return {
         "success": True,
+        "count": len(ticket_list),
+        "status_counts": status_counts,
+        "tickets": ticket_list,
+    }
+
+
+
+@router.get("/api/tickets/team/{team_name}")
+def get_admin_team_tickets(
+    team_name: str,
+    requester_id: str,
+    db: Session = Depends(get_db)
+):
+    requester = (
+        db.query(User)
+        .filter(User.id == requester_id)
+        .first()
+    )
+
+    if not requester:
+        return {
+            "success": False,
+            "error": "Requester not found"
+        }
+
+    if requester.role != "admin":
+        return {
+            "success": False,
+            "error": "Only admins can view tickets by team"
+        }
+
+    tickets = (
+        db.query(Ticket)
+        .join(User, Ticket.user_id == User.id)
+        .filter(User.team == team_name)
+        .order_by(Ticket.created_at.desc())
+        .all()
+    )
+
+    return {
+        "success": True,
+        "team": team_name,
+        "count": len(tickets),
         "tickets": [
             ticket_to_dict(ticket)
             for ticket in tickets

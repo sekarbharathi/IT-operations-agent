@@ -31,7 +31,7 @@ openai_client = OpenAI(
 
 MODEL = "gpt-4o-mini"
 
-CURRENT_USER_ID = "user_001"
+CURRENT_USER_ID = "user_002"
 
 
 SYSTEM_PROMPT  = """
@@ -110,7 +110,9 @@ SYSTEM_PROMPT  = """
         - After troubleshooting or incident checking, do not automatically
         create a ticket. Wait for an explicit ticket request from the user.
 
-        - Only use knowledge base for answering questions if the information is available in the retrieved documents. If no relevant documents are found, inform the user that you could not find relevant information.
+        - Only use knowledge base for answering questions if the information 
+        is available in the retrieved documents. If no relevant documents are found, 
+        inform the user that you could not find relevant information.
 
         ========================
         4. TICKETS
@@ -140,7 +142,7 @@ SYSTEM_PROMPT  = """
 
         "employee's tickets" → get_employee_tickets
 
-        "all tickets" → get_all_tickets
+        "all tickets, count" → get_all_tickets
 
         specific ticket ID → get_ticket
 
@@ -165,12 +167,26 @@ SYSTEM_PROMPT  = """
         - If get_my_tickets already provides the required information,
         do not call get_ticket again.
 
+        - ### Ticket Count Rules
+
+        * For total ticket counts, use the `count` field returned by the ticket retrieval tool.
+        * For status-specific counts, use the `status_counts` field returned by that tool.
+        * For example, when asked "How many closed tickets?", use `status_counts.closed`.
+        * When asked "How many open tickets?", use `status_counts.open`.
+        * When asked "How many tickets are in progress?", use `status_counts.in_progress`.
+        * Never calculate status counts from conversation history, previous answers, or remembered values.
+        * Never invent or estimate ticket counts.
+        * Always use the latest successful tool result for the requested ticket scope.
+        * If the tool call fails or does not return the requested count, explain that the count could not be retrieved instead of guessing.
+
+
+
         ========================
         5. EMPLOYEES AND USERS
         ========================
 
         - For the user's own details, use get_user.
-        - For the user's own permissions, use get_user_permissions.
+        - For the user's own permissions, use get_user_permissions.`
         - For employee lists or employees managed by the user, use
         get_all_employees.
         - For a specific employee, use get_employee with the target
@@ -395,8 +411,8 @@ TOOLS = [
             }
         },
         {
-            "type": "function",
-            "function": {
+        "type": "function",
+        "function": {
                 "name": "get_all_tickets",
                 "description": """"description": "Get ALL tickets across the entire organization. Use this when the user asks for 'all tickets', 'every ticket', 'all support tickets', 'all tickets across the organization', 
                 or an equivalent organization-wide request. NEVER use get_my_tickets for these requests. The backend allows this only for authenticated admins.",""",
@@ -406,7 +422,8 @@ TOOLS = [
                     "required": []
                 }
             }
-        },
+         },
+
         {
         "type": "function",
         "function": {

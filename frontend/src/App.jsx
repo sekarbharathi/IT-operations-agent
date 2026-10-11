@@ -19,6 +19,16 @@ function App() {
    */
   const [tickets, setTickets] = useState([]);
   const [dashboardTickets, setDashboardTickets] = useState([]);
+  const [teamTickets, setTeamTickets] = useState([]);
+  const [selectedTeam, setSelectedTeam] = useState("IT Development");
+
+  const teams = [
+    "IT Development",
+    "IT Administration",
+    "IT Operations",
+    "Finance",
+    "Finance Applications",
+  ];
 
   const [activePage, setActivePage] = useState("dashboard");
 
@@ -65,9 +75,11 @@ function App() {
    * All Tickets -> dashboardTickets
    */
   const visibleTickets =
-    ticketScope === "team" || ticketScope === "all"
-      ? dashboardTickets
-      : tickets;
+    ticketScope === "team"
+      ? teamTickets
+      : ticketScope === "all"
+        ? dashboardTickets
+        : tickets;
 
   /*
    * Load conversations and tickets when the application starts.
@@ -109,6 +121,12 @@ function App() {
       behavior: "smooth",
     });
   }, [messages, loading]);
+
+  useEffect(() => {
+  if (currentUser?.role === "admin") {
+    loadAdminTeamTickets(selectedTeam);
+  }
+}, [selectedTeam, currentUser?.role]);
 
   /*
    * Load conversation list.
@@ -270,7 +288,7 @@ function App() {
   async function loadCurrentUser() {
     try {
       const response = await fetch(
-        `${API_URL}/api/users/user_001`
+        `${API_URL}/api/users/user_003`
       );
 
       const data = await response.json();
@@ -387,105 +405,128 @@ function App() {
    * Load tickets belonging to the current user
    * and role-based dashboard tickets.
    */
-  async function loadTickets() {
+    async function loadTickets() {
+      try {
+        const userId = "user_003";
+
+        const userResponse = await fetch(
+          `${API_URL}/api/users/${userId}`
+        );
+
+        const user = await userResponse.json();
+
+        if (!userResponse.ok) {
+          throw new Error("Failed to load current user");
+        }
+
+        const ticketsResponse = await fetch(
+          `${API_URL}/api/tickets?user_id=${userId}`
+        );
+
+        const ticketsData = await ticketsResponse.json();
+
+        if (!ticketsResponse.ok || !ticketsData.success) {
+          throw new Error("Failed to load my tickets");
+        }
+
+        setTickets(ticketsData.tickets);
+
+        if (user.role === "employee") {
+          setTeamTickets([]);
+          setDashboardTickets(ticketsData.tickets);
+          return;
+        }
+
+        if (user.role === "manager") {
+          const teamResponse = await fetch(
+            `${API_URL}/api/tickets/team?requester_id=${userId}`
+          );
+
+          const teamData = await teamResponse.json();
+
+          if (!teamResponse.ok || !teamData.success) {
+            throw new Error(
+              teamData.error || "Failed to load team tickets"
+            );
+          }
+
+          setTeamTickets(teamData.tickets);
+          setDashboardTickets(teamData.tickets);
+          return;
+        }
+
+        if (user.role === "admin") {
+          // Try loading team tickets separately.
+          // A team endpoint error must not prevent all tickets loading.
+                  // Load tickets for the admin's selected team.
+        try {
+          const teamResponse = await fetch(
+            `${API_URL}/api/tickets/team/${encodeURIComponent(selectedTeam)}?requester_id=${userId}`
+          );
+
+          const teamData = await teamResponse.json();
+
+          if (!teamResponse.ok || !teamData.success) {
+            throw new Error(
+              teamData.error || "Failed to load team tickets"
+            );
+          }
+
+          setTeamTickets(teamData.tickets);
+        } catch (teamError) {
+          setTeamTickets([]);
+
+          console.error(
+            "Failed to load admin team tickets:",
+            teamError
+          );
+        }
+
+          // Load all tickets independently.
+          const allResponse = await fetch(
+            `${API_URL}/api/tickets/all?requester_id=${userId}`
+          );
+
+          const allData = await allResponse.json();
+
+          if (!allResponse.ok || !allData.success) {
+            throw new Error(
+              allData.error || "Failed to load all tickets"
+            );
+          }
+
+          setDashboardTickets(allData.tickets);
+        }
+      } catch (error) {
+        console.error("Failed to load tickets:", error);
+      } finally {
+        setLoadingTickets(false);
+      }
+    }
+    async function loadAdminTeamTickets(teamName) {
+    const userId = currentUser?.id;
+
+    if (!userId || currentUser?.role !== "admin") {
+      return;
+    }
+
     try {
-      const userId = "user_001";
-
-      /*
-       * Load current user.
-       */
-      const userResponse = await fetch(
-        `${API_URL}/api/users/${userId}`
+      const response = await fetch(
+        `${API_URL}/api/tickets/team/${encodeURIComponent(teamName)}?requester_id=${encodeURIComponent(userId)}`
       );
 
-      const user = await userResponse.json();
+      const data = await response.json();
 
-      /*
-       * Load current user's own tickets.
-       */
-      const ticketsResponse = await fetch(
-        `${API_URL}/api/tickets?user_id=${userId}`
-      );
-
-      const ticketsData = await ticketsResponse.json();
-
-      if (!ticketsData.success) {
+      if (!response.ok || !data.success) {
         throw new Error(
-          "Failed to load tickets"
+          data.error || "Failed to load team tickets"
         );
       }
 
-      /*
-       * Always keep the user's own tickets
-       * separately.
-       */
-      setTickets(ticketsData.tickets);
-
-      /*
-       * Employee:
-       * dashboard shows only their tickets.
-       */
-      if (user.role === "employee") {
-        setDashboardTickets(
-          ticketsData.tickets
-        );
-        return;
-      }
-
-      /*
-       * Manager:
-       * dashboard shows team tickets.
-       */
-      if (user.role === "manager") {
-        const teamResponse = await fetch(
-          `${API_URL}/api/tickets/team?requester_id=${userId}`
-        );
-
-        const teamData =
-          await teamResponse.json();
-
-        if (!teamData.success) {
-          throw new Error(
-            "Failed to load team tickets"
-          );
-        }
-
-        setDashboardTickets(
-          teamData.tickets
-        );
-        return;
-      }
-
-      /*
-       * Admin:
-       * dashboard shows all tickets.
-       */
-      if (user.role === "admin") {
-        const allResponse = await fetch(
-          `${API_URL}/api/tickets/all?requester_id=${userId}`
-        );
-
-        const allData =
-          await allResponse.json();
-
-        if (!allData.success) {
-          throw new Error(
-            "Failed to load all tickets"
-          );
-        }
-
-        setDashboardTickets(
-          allData.tickets
-        );
-      }
-
+      setTeamTickets(data.tickets);
     } catch (error) {
-      console.error(
-        "Failed to load tickets:",
-        error
-      );
-    } finally {
-      setLoadingTickets(false);
+      console.error("Failed to load team tickets:", error);
+      setTeamTickets([]);
     }
   }
 
@@ -1105,89 +1146,164 @@ function App() {
                 </div>
               )}
 
-              {/* =================================================
+                            {/* =================================================
                   ADMIN TICKETS
                   ================================================= */}
 
-              {currentUser?.role ===
-                "admin" && (
-                <div className="recent-tickets">
+              {currentUser?.role === "admin" && (
+                <>
+                  {/* My Tickets */}
 
-                  <div className="section-header">
+                  <div className="recent-tickets">
+                    <div className="section-header">
+                      <h2>My Tickets</h2>
 
-                    <h2>
-                      All Tickets
-                    </h2>
+                      <button
+                        onClick={() => {
+                          setTicketScope("my");
+                          setSelectedTicket(null);
+                          setActivePage("tickets");
+                        }}
+                      >
+                        View all
+                      </button>
+                    </div>
 
-                    <button
-                      onClick={() => {
-                        setTicketScope("all");
-                        setSelectedTicket(null);
-                        setActivePage(
-                          "tickets"
-                        );
-                      }}
-                    >
-                      View all
-                    </button>
-
-                  </div>
-
-                  {dashboardTickets.length ===
-                  0 ? (
-                    <p className="empty-tickets">
-                      No tickets yet.
-                    </p>
-                  ) : (
-                    dashboardTickets
-                      .slice(0, 5)
-                      .map((ticket) => (
+                    {tickets.length === 0 ? (
+                      <p className="empty-tickets">
+                        No tickets yet.
+                      </p>
+                    ) : (
+                      tickets.slice(0, 5).map((ticket) => (
                         <div
                           key={ticket.id}
                           className="ticket-row"
-                          onClick={() =>
-                            openTicket(
-                              ticket,
-                              "all"
-                            )
-                          }
+                          onClick={() => openTicket(ticket, "my")}
                         >
-
                           <div>
-
-                            <strong>
-                              {ticket.id}
-                            </strong>
-
-                            <p>
-                              {
-                                ticket.description
-                              }
-                            </p>
-
+                            <strong>{ticket.id}</strong>
+                            <p>{ticket.description}</p>
                           </div>
 
                           <div>
-
                             <span className="ticket-category">
-                              {
-                                ticket.category
-                              }
+                              {ticket.category}
                             </span>
 
                             <span className="ticket-status">
-                              {
-                                ticket.status
-                              }
+                              {ticket.status}
                             </span>
-
                           </div>
-
                         </div>
                       ))
-                  )}
+                    )}
+                  </div>
 
-                </div>
+                  {/* My Team's Tickets */}
+
+                  <div className="recent-tickets">
+                    <div className="section-header">
+                      <h2>My Team's Tickets</h2>
+
+                      <select
+                        value={selectedTeam}
+                        onChange={(event) => setSelectedTeam(event.target.value)}
+                      >
+                        {teams.map((team) => (
+                          <option key={team} value={team}>
+                            {team}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        onClick={() => {
+                          setTicketScope("team");
+                          setSelectedTicket(null);
+                          setActivePage("tickets");
+                        }}
+                      >
+                        View all
+                      </button>
+                    </div>
+
+                    {teamTickets.length === 0 ? (
+                      <p className="empty-tickets">
+                        No team tickets available.
+                      </p>
+                    ) : (
+                      teamTickets.slice(0, 5).map((ticket) => (
+                        <div
+                          key={ticket.id}
+                          className="ticket-row"
+                          onClick={() => openTicket(ticket, "team")}
+                        >
+                          <div>
+                            <strong>{ticket.id}</strong>
+                            <p>{ticket.description}</p>
+                          </div>
+
+                          <div>
+                            <span className="ticket-category">
+                              {ticket.category}
+                            </span>
+
+                            <span className="ticket-status">
+                              {ticket.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* All Tickets */}
+
+                  <div className="recent-tickets">
+                    <div className="section-header">
+                      <h2>All Tickets</h2>
+
+                      <button
+                        onClick={() => {
+                          setTicketScope("all");
+                          setSelectedTicket(null);
+                          setActivePage("tickets");
+                        }}
+                      >
+                        View all
+                      </button>
+                    </div>
+
+                    {dashboardTickets.length === 0 ? (
+                      <p className="empty-tickets">
+                        No tickets yet.
+                      </p>
+                    ) : (
+                      dashboardTickets.slice(0, 5).map((ticket) => (
+                        <div
+                          key={ticket.id}
+                          className="ticket-row"
+                          onClick={() => openTicket(ticket, "all")}
+                        >
+                          <div>
+                            <strong>{ticket.id}</strong>
+                            <p>{ticket.description}</p>
+                          </div>
+
+                          <div>
+                            <span className="ticket-category">
+                              {ticket.category}
+                            </span>
+
+                            <span className="ticket-status">
+                              {ticket.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
               )}
 
             </div>
