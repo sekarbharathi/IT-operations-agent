@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useMsal } from "@azure/msal-react";
+import { loginRequest } from "./authConfig";
 
 const API_URL = "http://localhost:8000";
 
 function App() {
+  const { instance, accounts } = useMsal();
+  const isSignedIn = accounts.length > 0;
+  const account = accounts[0];
+  console.log("Signed-in Microsoft account:", account);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [conversations, setConversations] = useState([]);
@@ -97,6 +103,12 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+  if (currentUser?.id) {
+    loadTickets();
+  }
+  }, [currentUser?.id]);
+
   /*
    * Keep the active conversation ID in localStorage.
    */
@@ -127,6 +139,24 @@ function App() {
     loadAdminTeamTickets(selectedTeam);
   }
 }, [selectedTeam, currentUser?.role]);
+
+
+  async function getAccessToken() {
+    const account = instance.getActiveAccount() || accounts[0];
+
+    if (!account) {
+      throw new Error("No signed-in Microsoft account found.");
+    }
+
+    const response = await instance.acquireTokenSilent({
+      scopes: [import.meta.env.VITE_AZURE_API_SCOPE],
+      account,
+    });
+
+    return response.accessToken;
+  }
+
+  
 
   /*
    * Load conversation list.
@@ -223,19 +253,19 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/chat`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            message: userMessage,
-            conversation_id: conversationId,
-          }),
-        }
-      );
+      const token = await getAccessToken();
+
+      const response = await fetch(`${API_URL}/api/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          conversation_id: conversationId,
+        }),
+      });
 
       const data = await response.json();
 
@@ -288,19 +318,18 @@ function App() {
   async function loadCurrentUser() {
     try {
       const response = await fetch(
-        `${API_URL}/api/users/user_003`
+        `${API_URL}/api/users/user_002`
       );
 
       const data = await response.json();
 
       if (response.ok) {
         setCurrentUser(data);
+      } else {
+        throw new Error("Failed to load current user");
       }
     } catch (error) {
-      console.error(
-        "Failed to load current user:",
-        error
-      );
+      console.error("Failed to load current user:", error);
     }
   }
 
@@ -407,7 +436,11 @@ function App() {
    */
     async function loadTickets() {
       try {
-        const userId = "user_003";
+        const userId = currentUser?.id;
+
+        if (!userId) {
+          return;
+        }
 
         const userResponse = await fetch(
           `${API_URL}/api/users/${userId}`
@@ -590,8 +623,27 @@ function App() {
     });
   }
 
+  if (!isSignedIn) {
+    return (
+      <div className="app">
+        <main className="chat">
+          <div className="welcome">
+            <h1>OpsAI</h1>
+            <p>Sign in with your Microsoft account to continue.</p>
+            <button
+              onClick={() => instance.loginRedirect(loginRequest)}
+            >
+              Sign in with Microsoft
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
   return (
     <div className="app">
+
+      
 
       {/* =================================================
           SIDEBAR
